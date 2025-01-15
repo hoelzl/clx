@@ -12,9 +12,9 @@ To install clx, create a virtualenv, activate it, then install all four packages
     python -m pip install  clx-cli
     python -m pip install  clx-faststream-backend
 
-Before using the clx conversion, you have to start up a RabbitMQ queue, e.g. using Docker:
+Before using the clx conversion, you have to start up RabbitMQ using Docker-compose (Version 2):
 
-    docker run -p 5672:5672 rabbitmq:latest
+    docker compose up
 
 
 ## Useless Information
