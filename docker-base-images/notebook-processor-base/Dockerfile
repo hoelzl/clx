@@ -40,13 +40,14 @@ RUN dotnet tool install -g --no-cache Microsoft.dotnet-interactive && \
 RUN unzip ./deno-x86_64-unknown-linux-gnu.zip -d deno-bin &&\
     rm ./deno-x86_64-unknown-linux-gnu.zip &&\
     cp ./deno-bin/deno /usr/local/bin &&\
-    /usr/local/bin/deno jupyter --unstable --install
+    /usr/local/bin/deno jupyter --unstable --install &&\
+    rm -fr deno-bin
 
 RUN unzip ./ijava-1.3.0.zip -d ijava-1.3.0 &&\
-    rm ./ijava-1.3.0.zip
-WORKDIR /app/ijava-1.3.0
-RUN python install.py --sys-prefix
-
-WORKDIR /app
+    rm ./ijava-1.3.0.zip &&\
+    cd /app/ijava-1.3.0 &&\
+    python install.py --sys-prefix &&\
+    cd /app &&\
+    rm -fr ijava-1.3.0
 
 EXPOSE 8888
