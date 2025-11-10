@@ -1,10 +1,17 @@
 # syntax=docker/dockerfile:1
+#
+# Build from project root with:
+#   docker build -f services/drawio-converter/Dockerfile -t clx-drawio-converter \
+#     --build-arg SERVICE_PATH=services/drawio-converter --build-arg COMMON_PATH=. .
+#
+# Or use the build script: ./build-services.sh drawio-converter
+#
 FROM python:3.11-slim
 
 WORKDIR /app
 
-ARG SERVICE_PATH=.
-ARG COMMON_PATH=../..
+ARG SERVICE_PATH=services/drawio-converter
+ARG COMMON_PATH=.
 
 # Copy binary dependencies and requirements first (for better layer caching)
 COPY ${COMMON_PATH}/docker-base-images/drawio-converter-base/drawio-amd64-24.7.5.deb .

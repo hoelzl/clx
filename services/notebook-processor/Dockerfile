@@ -1,10 +1,17 @@
 # syntax=docker/dockerfile:1
+#
+# Build from project root with:
+#   docker build -f services/notebook-processor/Dockerfile -t clx-notebook-processor \
+#     --build-arg SERVICE_PATH=services/notebook-processor --build-arg COMMON_PATH=. .
+#
+# Or use the build script: ./build-services.sh notebook-processor
+#
 FROM mambaorg/micromamba:1.5.8-jammy-cuda-12.5.0
 
 USER root
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
-ARG SERVICE_PATH=.
-ARG COMMON_PATH=../..
+ARG SERVICE_PATH=services/notebook-processor
+ARG COMMON_PATH=.
 
 WORKDIR /app
 

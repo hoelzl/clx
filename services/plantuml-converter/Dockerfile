@@ -1,10 +1,17 @@
 # syntax=docker/dockerfile:1
+#
+# Build from project root with:
+#   docker build -f services/plantuml-converter/Dockerfile -t clx-plantuml-converter \
+#     --build-arg SERVICE_PATH=services/plantuml-converter --build-arg COMMON_PATH=. .
+#
+# Or use the build script: ./build-services.sh plantuml-converter
+#
 FROM python:3.11-slim
 
 WORKDIR /app
 
-ARG SERVICE_PATH=.
-ARG COMMON_PATH=../..
+ARG SERVICE_PATH=services/plantuml-converter
+ARG COMMON_PATH=.
 
 # Copy requirements and PlantUML jar first (for better layer caching)
 COPY ${COMMON_PATH}/docker-base-images/plantuml-converter-base/plantuml-1.2024.6.jar ./plantuml.jar

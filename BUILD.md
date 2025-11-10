@@ -31,32 +31,53 @@ docker build ...
 
 ## Building Services
 
-### Build from Service Directory
-
-Each service can be built from its own directory:
-
-```bash
-cd services/drawio-converter
-DOCKER_BUILDKIT=1 docker build -t clx-drawio-converter .
-
-cd services/notebook-processor
-DOCKER_BUILDKIT=1 docker build -t clx-notebook-processor .
-
-cd services/plantuml-converter
-DOCKER_BUILDKIT=1 docker build -t clx-plantuml-converter .
-```
+**IMPORTANT**: All builds must be run from the **root directory** of the project, as the Dockerfiles need access to both the service code and the shared `clx-common` directory.
 
 ### Build from Root Directory
 
-You can also build from the root directory using build context arguments:
+Build each service from the project root:
 
 ```bash
-DOCKER_BUILDKIT=1 docker build \
+# From the root of the clx project
+export DOCKER_BUILDKIT=1
+
+# Build drawio-converter
+docker build \
   -f services/drawio-converter/Dockerfile \
   -t clx-drawio-converter \
   --build-arg SERVICE_PATH=services/drawio-converter \
   --build-arg COMMON_PATH=. \
   .
+
+# Build notebook-processor
+docker build \
+  -f services/notebook-processor/Dockerfile \
+  -t clx-notebook-processor \
+  --build-arg SERVICE_PATH=services/notebook-processor \
+  --build-arg COMMON_PATH=. \
+  .
+
+# Build plantuml-converter
+docker build \
+  -f services/plantuml-converter/Dockerfile \
+  -t clx-plantuml-converter \
+  --build-arg SERVICE_PATH=services/plantuml-converter \
+  --build-arg COMMON_PATH=. \
+  .
+```
+
+### Using the Build Script
+
+For convenience, use the provided build script:
+
+```bash
+# Build all services
+./build-services.sh
+
+# Build specific service
+./build-services.sh drawio-converter
+./build-services.sh notebook-processor
+./build-services.sh plantuml-converter
 ```
 
 ## How Caching Works
