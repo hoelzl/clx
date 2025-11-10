@@ -16,13 +16,21 @@ This fails because Docker cannot access files outside the build context (like `.
 
 ### Method 1: Use the Build Script (Easiest)
 
+**Linux/macOS:**
 ```bash
 # From project root
 ./build-services.sh drawio-converter
 ```
 
+**Windows PowerShell:**
+```powershell
+# From project root
+.\build-services.ps1 drawio-converter
+```
+
 ### Method 2: Direct Docker Build
 
+**Linux/macOS:**
 ```bash
 # From project root
 export DOCKER_BUILDKIT=1
@@ -35,12 +43,31 @@ docker build \
   .
 ```
 
+**Windows PowerShell:**
+```powershell
+# From project root
+$env:DOCKER_BUILDKIT = "1"
+
+docker build `
+  -f services/drawio-converter/Dockerfile `
+  -t clx-drawio-converter `
+  --build-arg SERVICE_PATH=services/drawio-converter `
+  --build-arg COMMON_PATH=. `
+  .
+```
+
 Notice the final `.` - this sets the build context to the current directory (project root).
 
 ## Build All Services
 
+**Linux/macOS:**
 ```bash
 ./build-services.sh
+```
+
+**Windows PowerShell:**
+```powershell
+.\build-services.ps1
 ```
 
 ## Why This Works

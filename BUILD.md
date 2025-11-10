@@ -15,13 +15,25 @@ The Docker containers for CLX services use **BuildKit cache mounts** to optimize
 
 You must use **Docker BuildKit** to build these containers. BuildKit is the default in Docker 20.10+, but you can ensure it's enabled:
 
+**Linux/macOS:**
 ```bash
 # Set environment variable for single build
 export DOCKER_BUILDKIT=1
 docker build ...
+```
 
-# Or enable it permanently in Docker daemon config
-# Add to /etc/docker/daemon.json:
+**Windows PowerShell:**
+```powershell
+# Set environment variable for single build
+$env:DOCKER_BUILDKIT = "1"
+docker build ...
+```
+
+**Permanent configuration** (all platforms):
+```json
+# Add to Docker daemon config:
+# Linux/macOS: /etc/docker/daemon.json
+# Windows: C:\ProgramData\docker\config\daemon.json
 {
   "features": {
     "buildkit": true
@@ -33,10 +45,37 @@ docker build ...
 
 **IMPORTANT**: All builds must be run from the **root directory** of the project, as the Dockerfiles need access to both the service code and the shared `clx-common` directory.
 
-### Build from Root Directory
+### Using the Build Script (Recommended)
 
-Build each service from the project root:
+For convenience, use the provided build script:
 
+**Linux/macOS:**
+```bash
+# Build all services
+./build-services.sh
+
+# Build specific service
+./build-services.sh drawio-converter
+./build-services.sh notebook-processor
+./build-services.sh plantuml-converter
+```
+
+**Windows PowerShell:**
+```powershell
+# Build all services
+.\build-services.ps1
+
+# Build specific service
+.\build-services.ps1 drawio-converter
+.\build-services.ps1 notebook-processor
+.\build-services.ps1 plantuml-converter
+```
+
+### Manual Build from Root Directory
+
+If you prefer to build manually, you can run docker build directly from the project root:
+
+**Linux/macOS:**
 ```bash
 # From the root of the clx project
 export DOCKER_BUILDKIT=1
@@ -66,18 +105,34 @@ docker build \
   .
 ```
 
-### Using the Build Script
+**Windows PowerShell:**
+```powershell
+# From the root of the clx project
+$env:DOCKER_BUILDKIT = "1"
 
-For convenience, use the provided build script:
+# Build drawio-converter
+docker build `
+  -f services/drawio-converter/Dockerfile `
+  -t clx-drawio-converter `
+  --build-arg SERVICE_PATH=services/drawio-converter `
+  --build-arg COMMON_PATH=. `
+  .
 
-```bash
-# Build all services
-./build-services.sh
+# Build notebook-processor
+docker build `
+  -f services/notebook-processor/Dockerfile `
+  -t clx-notebook-processor `
+  --build-arg SERVICE_PATH=services/notebook-processor `
+  --build-arg COMMON_PATH=. `
+  .
 
-# Build specific service
-./build-services.sh drawio-converter
-./build-services.sh notebook-processor
-./build-services.sh plantuml-converter
+# Build plantuml-converter
+docker build `
+  -f services/plantuml-converter/Dockerfile `
+  -t clx-plantuml-converter `
+  --build-arg SERVICE_PATH=services/plantuml-converter `
+  --build-arg COMMON_PATH=. `
+  .
 ```
 
 ## How Caching Works
