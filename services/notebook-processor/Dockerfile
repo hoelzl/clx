@@ -49,18 +49,20 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         unzip \
         software-properties-common
 
-# Add .NET repository, install SDK, and set up .NET Interactive
+# Add .NET repository
+RUN add-apt-repository ppa:dotnet/backports
+
+# Install .NET SDK
 # Note: Not using apt cache mounts here because we're adding new repositories
 # and the cache can cause issues with repository metadata
-# Combined into single RUN to ensure dotnet is available in the same shell session
-RUN add-apt-repository ppa:dotnet/backports && \
-    dpkg -i packages-microsoft-prod.deb && \
+RUN dpkg -i packages-microsoft-prod.deb && \
     rm packages-microsoft-prod.deb && \
-    apt-get update && \
     apt-get install -y dotnet-sdk-9.0 && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    dotnet tool install -g --no-cache Microsoft.dotnet-interactive && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install .NET Interactive
+RUN dotnet tool install -g --no-cache Microsoft.dotnet-interactive && \
     mkdir -p /root/.local/share/jupyter/kernels && \
     dotnet interactive jupyter install
 
