@@ -135,6 +135,75 @@ docker build `
   .
 ```
 
+## Pushing to Docker Hub
+
+After building your images, you can push them to Docker Hub for sharing or deployment.
+
+### Prerequisites
+
+1. **Create a Docker Hub account** at https://hub.docker.com if you don't have one
+2. **Login to Docker Hub** from the command line:
+   ```bash
+   docker login
+   ```
+
+### Using the Push Script (Recommended)
+
+**Linux/macOS:**
+```bash
+# Push all services
+./push-services.sh YOUR_DOCKERHUB_USERNAME
+
+# Push specific service
+./push-services.sh YOUR_DOCKERHUB_USERNAME drawio-converter
+./push-services.sh YOUR_DOCKERHUB_USERNAME notebook-processor
+./push-services.sh YOUR_DOCKERHUB_USERNAME plantuml-converter
+```
+
+**Windows PowerShell:**
+```powershell
+# Push all services
+.\push-services.ps1 YOUR_DOCKERHUB_USERNAME
+
+# Push specific service
+.\push-services.ps1 YOUR_DOCKERHUB_USERNAME drawio-converter
+.\push-services.ps1 YOUR_DOCKERHUB_USERNAME notebook-processor
+.\push-services.ps1 YOUR_DOCKERHUB_USERNAME plantuml-converter
+```
+
+### What the Push Script Does
+
+For each service, the script:
+1. Tags the local image as `username/clx-service-name:0.3.0`
+2. Tags the local image as `username/clx-service-name:latest`
+3. Pushes both tags to Docker Hub
+
+### Manual Push
+
+You can also push manually:
+
+**Linux/macOS:**
+```bash
+# Tag the image
+docker tag clx-drawio-converter YOUR_USERNAME/clx-drawio-converter:0.3.0
+docker tag clx-drawio-converter YOUR_USERNAME/clx-drawio-converter:latest
+
+# Push to Docker Hub
+docker push YOUR_USERNAME/clx-drawio-converter:0.3.0
+docker push YOUR_USERNAME/clx-drawio-converter:latest
+```
+
+**Windows PowerShell:**
+```powershell
+# Tag the image
+docker tag clx-drawio-converter YOUR_USERNAME/clx-drawio-converter:0.3.0
+docker tag clx-drawio-converter YOUR_USERNAME/clx-drawio-converter:latest
+
+# Push to Docker Hub
+docker push YOUR_USERNAME/clx-drawio-converter:0.3.0
+docker push YOUR_USERNAME/clx-drawio-converter:latest
+```
+
 ## How Caching Works
 
 ### Pip Cache
