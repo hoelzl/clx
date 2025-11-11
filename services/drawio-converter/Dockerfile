@@ -22,6 +22,8 @@ COPY ${COMMON_PATH}/docker-base-images/drawio-converter-base/requirements.txt ./
 # Using apt cache mounts to avoid re-downloading packages
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache && \
     apt-get update && \
     apt-get install -y \
         dbus \
