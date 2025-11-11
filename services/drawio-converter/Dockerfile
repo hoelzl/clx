@@ -19,7 +19,10 @@ COPY ${COMMON_PATH}/docker-base-images/drawio-converter-base/ArchitectsDaughter-
 COPY ${COMMON_PATH}/docker-base-images/drawio-converter-base/requirements.txt ./base-requirements.txt
 
 # Install system dependencies and drawio
-RUN apt-get update && \
+# Using apt cache mounts to avoid re-downloading packages
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
     apt-get install -y \
         dbus \
         dbus-x11 \
@@ -36,8 +39,6 @@ RUN apt-get update && \
         fonts-noto-cjk && \
     apt-get -y -f install ./drawio-amd64-24.7.5.deb && \
     rm drawio-amd64-24.7.5.deb && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
     npm install -g svgo && \
     fc-cache -f -v
 
