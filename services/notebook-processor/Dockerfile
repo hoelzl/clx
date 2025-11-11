@@ -49,15 +49,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         unzip \
         software-properties-common
 
-# Add .NET repository and install
+# Add .NET repository and install SDK
+# Note: Not using apt cache mounts here because we're adding new repositories
+# and the cache can cause issues with repository metadata
 RUN add-apt-repository ppa:dotnet/backports && \
     dpkg -i packages-microsoft-prod.deb && \
-    rm packages-microsoft-prod.deb
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm packages-microsoft-prod.deb && \
     apt-get update && \
-    apt-get install -y dotnet-sdk-9.0
+    apt-get install -y dotnet-sdk-9.0 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install .NET Interactive
 RUN dotnet tool install -g --no-cache Microsoft.dotnet-interactive && \

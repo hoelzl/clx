@@ -44,12 +44,13 @@ function Build-Service {
 
     Write-ColorOutput "Building $ServiceName..." "Yellow"
 
+    # Redirect docker output to host to prevent it from being captured in return value
     docker build `
         -f "$servicePath/Dockerfile" `
         -t $imageName `
         --build-arg SERVICE_PATH=$servicePath `
         --build-arg COMMON_PATH=. `
-        .
+        . | Out-Host
 
     if ($LASTEXITCODE -eq 0) {
         Write-ColorOutput "✓ Successfully built $imageName" "Green"
