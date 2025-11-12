@@ -71,9 +71,33 @@ class WorkerPoolManager:
         self.running = True
         self.monitor_thread: Optional[threading.Thread] = None
 
+    def cleanup_stale_workers(self):
+        """Clean up stale worker records from the database.
+
+        This removes all worker records that are no longer running,
+        preventing issues on startup.
+        """
+        logger.info("Cleaning up stale worker records from database")
+
+        conn = self.job_queue._get_conn()
+        cursor = conn.execute("SELECT COUNT(*) FROM workers")
+        total_workers = cursor.fetchone()[0]
+
+        if total_workers > 0:
+            logger.info(f"Found {total_workers} existing worker record(s), removing...")
+            conn.execute("DELETE FROM workers")
+            deleted_count = cursor.rowcount
+            conn.commit()
+            logger.info(f"Removed {deleted_count} stale worker record(s)")
+        else:
+            logger.info("No stale workers found")
+
     def start_pools(self):
         """Start all worker pools defined in worker_configs."""
         logger.info(f"Starting worker pools with {len(self.worker_configs)} configurations")
+
+        # Clean up any stale worker records first
+        self.cleanup_stale_workers()
 
         for config in self.worker_configs:
             logger.info(

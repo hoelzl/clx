@@ -67,7 +67,28 @@ These tests use mocks and don't require Docker.
 
 ### Option 2: Manual Testing with Pool Manager CLI
 
-**Note:** This requires Docker images to be built first (see Building Docker Images section).
+**IMPORTANT Prerequisites:**
+1. Docker must be running (`docker ps` should work)
+2. Docker images must be built first - see [Building Docker Images](#building-docker-images) section below
+3. If you've run this before, you may have stale worker records - the pool manager will automatically clean these up
+
+**Expected Output:** You should see workers starting successfully:
+```
+Starting worker pools with 3 configurations
+Cleaning up stale worker records from database
+Starting 2 notebook workers (image: notebook-processor:0.2.2, memory: 1g)
+Started worker 1: clx-notebook-worker-0 (abc123...)
+Started worker 2: clx-notebook-worker-1 (def456...)
+Starting 1 drawio workers (image: drawio-converter:0.2.2, memory: 512m)
+Started worker 3: clx-drawio-worker-0 (ghi789...)
+Starting 1 plantuml workers (image: plantuml-converter:0.2.2, memory: 512m)
+Started worker 4: clx-plantuml-worker-0 (jkl012...)
+Started 4 workers total
+Starting health monitoring...
+Worker pools started. Press Ctrl+C to stop.
+```
+
+If you see workers with "stale heartbeat" messages immediately, the Docker images are likely not built yet.
 
 Run the worker pool manager:
 
@@ -195,6 +216,32 @@ sudo usermod -aG docker $USER
 ```bash
 # Remove existing worker containers
 docker rm -f $(docker ps -a -q --filter "name=clx-*-worker-*")
+```
+
+### Stale worker records in database
+
+**Symptoms:** When starting the pool manager, you see messages like:
+```
+Worker 1 (notebook) has stale heartbeat (last: 2025-11-12 16:06:46)
+Worker 1 container is exited, marking as dead
+```
+
+**Cause:** The database contains worker records from a previous run that wasn't shut down cleanly.
+
+**Solution 1 (Automatic):** The pool manager now automatically cleans up stale workers on startup (as of the latest update).
+
+**Solution 2 (Manual):** Run the cleanup script:
+```bash
+# Linux/Mac
+python cleanup_workers.py
+
+# Windows (PowerShell)
+python cleanup_workers.py
+```
+
+**Solution 3 (Manual SQLite):** Delete worker records directly:
+```bash
+sqlite3 clx_jobs.db "DELETE FROM workers;"
 ```
 
 ## Checking Worker Status
