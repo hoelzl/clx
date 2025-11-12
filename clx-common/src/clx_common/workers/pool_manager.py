@@ -433,3 +433,68 @@ class WorkerPoolManager:
             stats[worker_type][status] = count
 
         return stats
+
+
+if __name__ == "__main__":
+    """Example CLI for running worker pools."""
+    import sys
+    import os
+
+    # Example configuration
+    db_path = Path(os.getenv('CLX_DB_PATH', 'clx_jobs.db'))
+    workspace_path = Path(os.getenv('CLX_WORKSPACE_PATH', os.getcwd()))
+
+    # Initialize database if it doesn't exist
+    from clx_common.database.schema import init_database
+    if not db_path.exists():
+        logger.info(f"Initializing database at {db_path}")
+        init_database(db_path)
+
+    # Define worker configurations
+    worker_configs = [
+        WorkerConfig(
+            worker_type='notebook',
+            image='notebook-processor:0.2.2',
+            count=2,
+            memory_limit='1g'
+        ),
+        WorkerConfig(
+            worker_type='drawio',
+            image='drawio-converter:0.2.2',
+            count=1,
+            memory_limit='512m'
+        ),
+        WorkerConfig(
+            worker_type='plantuml',
+            image='plantuml-converter:0.2.2',
+            count=1,
+            memory_limit='512m'
+        ),
+    ]
+
+    # Create pool manager
+    manager = WorkerPoolManager(
+        db_path=db_path,
+        workspace_path=workspace_path,
+        worker_configs=worker_configs
+    )
+
+    try:
+        logger.info("Starting worker pools...")
+        manager.start_pools()
+
+        logger.info("Starting health monitoring...")
+        manager.start_monitoring(check_interval=10)
+
+        logger.info("Worker pools started. Press Ctrl+C to stop.")
+
+        # Keep running
+        import time
+        while manager.running:
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+    finally:
+        manager.stop_pools()
+        logger.info("Stopped.")
