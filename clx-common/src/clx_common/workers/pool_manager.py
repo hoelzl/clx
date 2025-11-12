@@ -74,27 +74,92 @@ class WorkerPoolManager:
     def cleanup_stale_workers(self):
         """Clean up stale worker records from the database.
 
-        This removes all worker records that are no longer running,
+        This removes worker records for containers that no longer exist,
         preventing issues on startup.
         """
         logger.info("Cleaning up stale worker records from database")
 
         conn = self.job_queue._get_conn()
-        cursor = conn.execute("SELECT COUNT(*) FROM workers")
-        total_workers = cursor.fetchone()[0]
+        cursor = conn.execute("SELECT id, container_id FROM workers")
+        workers = cursor.fetchall()
 
-        if total_workers > 0:
-            logger.info(f"Found {total_workers} existing worker record(s), removing...")
-            conn.execute("DELETE FROM workers")
-            deleted_count = cursor.rowcount
-            conn.commit()
-            logger.info(f"Removed {deleted_count} stale worker record(s)")
+        if not workers:
+            logger.info("No existing worker records found")
+            return
+
+        logger.info(f"Found {len(workers)} existing worker record(s), checking status...")
+
+        removed_count = 0
+        for worker_id, container_id in workers:
+            try:
+                # Check if container still exists
+                container = self.docker_client.containers.get(container_id)
+                container.reload()
+
+                # If container exists but is not running, remove it
+                if container.status != 'running':
+                    logger.info(
+                        f"Worker {worker_id} container {container_id[:12]} is {container.status}, "
+                        f"removing container and worker record"
+                    )
+                    try:
+                        container.stop(timeout=2)
+                        container.remove()
+                    except Exception:
+                        pass  # Container might already be stopped
+
+                    conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                    removed_count += 1
+                else:
+                    logger.info(
+                        f"Worker {worker_id} container {container_id[:12]} is still running, keeping it"
+                    )
+
+            except docker.errors.NotFound:
+                # Container doesn't exist, remove worker record
+                logger.info(
+                    f"Worker {worker_id} container {container_id[:12]} not found, removing worker record"
+                )
+                conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                removed_count += 1
+            except Exception as e:
+                logger.warning(
+                    f"Error checking worker {worker_id} container {container_id[:12]}: {e}"
+                )
+                # On error, remove the worker record to be safe
+                conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                removed_count += 1
+
+        conn.commit()
+
+        if removed_count > 0:
+            logger.info(f"Removed {removed_count} stale worker record(s)")
         else:
-            logger.info("No stale workers found")
+            logger.info("No stale workers to remove")
+
+    def _ensure_network_exists(self):
+        """Ensure Docker network exists, create if needed."""
+        try:
+            self.docker_client.networks.get(self.network_name)
+            logger.info(f"Docker network '{self.network_name}' exists")
+        except docker.errors.NotFound:
+            logger.info(f"Docker network '{self.network_name}' not found, creating...")
+            self.docker_client.networks.create(
+                self.network_name,
+                driver='bridge',
+                check_duplicate=True
+            )
+            logger.info(f"Created Docker network '{self.network_name}'")
+        except Exception as e:
+            logger.error(f"Error checking/creating Docker network: {e}", exc_info=True)
+            raise
 
     def start_pools(self):
         """Start all worker pools defined in worker_configs."""
         logger.info(f"Starting worker pools with {len(self.worker_configs)} configurations")
+
+        # Ensure Docker network exists
+        self._ensure_network_exists()
 
         # Clean up any stale worker records first
         self.cleanup_stale_workers()
@@ -114,6 +179,44 @@ class WorkerPoolManager:
         logger.info(
             f"Started {sum(len(workers) for workers in self.workers.values())} workers total"
         )
+
+    def _wait_for_worker_registration(
+        self,
+        container_id: str,
+        timeout: int = 10
+    ) -> Optional[int]:
+        """Wait for a worker to register itself in the database.
+
+        Args:
+            container_id: Docker container ID (full or short)
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            Worker ID if registered, None if timeout
+        """
+        start_time = time.time()
+        poll_interval = 0.5
+        short_id = container_id[:12]  # Docker HOSTNAME is short ID
+
+        while (time.time() - start_time) < timeout:
+            conn = self.job_queue._get_conn()
+            # Check for both full and short container ID
+            cursor = conn.execute(
+                """
+                SELECT id FROM workers
+                WHERE container_id = ? OR container_id = ?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (container_id, short_id)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                return row[0]
+
+            time.sleep(poll_interval)
+
+        return None
 
     def _start_worker(
         self,
@@ -142,6 +245,7 @@ class WorkerPoolManager:
                 pass
 
             # Start container
+            # Note: The worker will self-register in the database when it starts
             container = self.docker_client.containers.run(
                 config.image,
                 name=container_name,
@@ -161,20 +265,23 @@ class WorkerPoolManager:
                 network=self.network_name
             )
 
-            # Register worker in database
-            conn = self.job_queue._get_conn()
-            cursor = conn.execute(
-                """
-                INSERT INTO workers (worker_type, container_id, status)
-                VALUES (?, ?, 'idle')
-                """,
-                (config.worker_type, container.id)
-            )
-            worker_id = cursor.lastrowid
-            conn.commit()
+            logger.info(f"Started container: {container_name} ({container.id[:12]})")
+
+            # Wait for worker to self-register in database (timeout after 10 seconds)
+            worker_id = self._wait_for_worker_registration(container.id, timeout=10)
+
+            if worker_id is None:
+                logger.error(
+                    f"Worker container {container_name} failed to register in database. "
+                    f"Check container logs with: docker logs {container_name}"
+                )
+                # Container is running but worker didn't register - likely crashed
+                container.stop(timeout=5)
+                container.remove()
+                return None
 
             logger.info(
-                f"Started worker {worker_id}: {container_name} ({container.id[:12]})"
+                f"Worker {worker_id} registered: {container_name} ({container.id[:12]})"
             )
 
             return {

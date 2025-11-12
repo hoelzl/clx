@@ -218,31 +218,40 @@ sudo usermod -aG docker $USER
 docker rm -f $(docker ps -a -q --filter "name=clx-*-worker-*")
 ```
 
-### Stale worker records in database
+### Workers immediately showing stale heartbeat (FIXED in latest version)
 
-**Symptoms:** When starting the pool manager, you see messages like:
+**Symptoms:** When starting the pool manager, containers start but immediately show as dead:
 ```
-Worker 1 (notebook) has stale heartbeat (last: 2025-11-12 16:06:46)
-Worker 1 container is exited, marking as dead
-```
-
-**Cause:** The database contains worker records from a previous run that wasn't shut down cleanly.
-
-**Solution 1 (Automatic):** The pool manager now automatically cleans up stale workers on startup (as of the latest update).
-
-**Solution 2 (Manual):** Run the cleanup script:
-```bash
-# Linux/Mac
-python cleanup_workers.py
-
-# Windows (PowerShell)
-python cleanup_workers.py
+Container clx-notebook-worker-0 already exists, removing...
+Worker 5 (notebook) has stale heartbeat (last: 2025-11-12 16:24:02)
+Worker 5 container is exited, marking as dead
 ```
 
-**Solution 3 (Manual SQLite):** Delete worker records directly:
-```bash
-sqlite3 clx_jobs.db "DELETE FROM workers;"
+**Root Cause:** The pool manager was pre-registering workers in the database, but the worker containers were also self-registering, creating duplicate entries. The pool manager would monitor the wrong worker ID and mark it as stale immediately.
+
+**Fix (Latest Version):** The pool manager now:
+1. Starts containers and waits for them to self-register (up to 10 seconds)
+2. Tracks the correct worker IDs registered by the containers
+3. Automatically creates the Docker network if it doesn't exist
+4. Intelligently cleans up only stale worker records on startup
+
+**If you still see this after updating:**
+
+Run the diagnostic script to check what's happening:
+```powershell
+# Works on all platforms
+python diagnose_workers.py
 ```
+
+This will show:
+- Docker network status
+- Container status and logs
+- Which Docker images exist
+
+Common causes if issue persists:
+- Docker images not built yet (see [Building Docker Images](#building-docker-images))
+- Docker network issues (the pool manager now auto-creates it)
+- Container crashes on startup (check logs with diagnostic script)
 
 ## Checking Worker Status
 
