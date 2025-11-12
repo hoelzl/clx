@@ -41,9 +41,7 @@ RUN --mount=type=cache,target=/opt/conda/pkgs,id=conda-pkgs,sharing=locked \
     micromamba config list --sources && \
     cat /root/.condarc && \
     echo "Installing packages..." && \
-    micromamba install -y -n base -f /tmp/packages.yaml && \
-    echo "=== AFTER INSTALL ===" && \
-    ls -lh /opt/conda/pkgs/ | head -20
+    micromamba install -y -n base -f /tmp/packages.yaml
 
 # Copy other large files AFTER conda install to avoid invalidating the conda cache
 COPY ${SERVICE_PATH}/base-requirements.txt ./base-requirements.txt
