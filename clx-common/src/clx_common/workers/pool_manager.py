@@ -246,6 +246,17 @@ class WorkerPoolManager:
 
             # Start container
             # Note: The worker will self-register in the database when it starts
+            # Mount the database directory, not the file (Windows compatibility)
+            db_dir = self.db_path.parent.absolute()
+            db_filename = self.db_path.name
+
+            logger.debug(
+                f"Mounting volumes for {container_name}:\n"
+                f"  Workspace: {self.workspace_path.absolute()} -> /workspace\n"
+                f"  Database:  {db_dir} -> /db\n"
+                f"  DB_PATH env: /db/{db_filename}"
+            )
+
             container = self.docker_client.containers.run(
                 config.image,
                 name=container_name,
@@ -254,11 +265,11 @@ class WorkerPoolManager:
                 mem_limit=config.memory_limit,
                 volumes={
                     str(self.workspace_path.absolute()): {'bind': '/workspace', 'mode': 'rw'},
-                    str(self.db_path.absolute()): {'bind': '/db/jobs.db', 'mode': 'rw'}
+                    str(db_dir): {'bind': '/db', 'mode': 'rw'}
                 },
                 environment={
                     'WORKER_TYPE': config.worker_type,
-                    'DB_PATH': '/db/jobs.db',
+                    'DB_PATH': f'/db/{db_filename}',
                     'LOG_LEVEL': 'INFO',
                     'USE_SQLITE_QUEUE': 'true'
                 },
@@ -275,9 +286,27 @@ class WorkerPoolManager:
                     f"Worker container {container_name} failed to register in database. "
                     f"Check container logs with: docker logs {container_name}"
                 )
+
+                # Get container logs for debugging
+                try:
+                    container.reload()
+                    logs = container.logs(tail=50).decode('utf-8', errors='replace')
+                    logger.error(f"Container {container_name} logs:\n{logs}")
+
+                    # Check container status
+                    logger.error(
+                        f"Container {container_name} status: {container.status}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to get container logs: {e}")
+
                 # Container is running but worker didn't register - likely crashed
-                container.stop(timeout=5)
-                container.remove()
+                try:
+                    container.stop(timeout=5)
+                    container.remove()
+                except Exception as e:
+                    logger.warning(f"Error stopping/removing container: {e}")
+
                 return None
 
             logger.info(
@@ -571,15 +600,27 @@ if __name__ == "__main__":
     import sys
     import os
 
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
     # Example configuration
     db_path = Path(os.getenv('CLX_DB_PATH', 'clx_jobs.db'))
     workspace_path = Path(os.getenv('CLX_WORKSPACE_PATH', os.getcwd()))
+
+    logger.info(f"Configuration:")
+    logger.info(f"  Database path: {db_path.absolute()}")
+    logger.info(f"  Workspace path: {workspace_path.absolute()}")
 
     # Initialize database if it doesn't exist
     from clx_common.database.schema import init_database
     if not db_path.exists():
         logger.info(f"Initializing database at {db_path}")
         init_database(db_path)
+    else:
+        logger.info(f"Using existing database at {db_path}")
 
     # Define worker configurations
     worker_configs = [
