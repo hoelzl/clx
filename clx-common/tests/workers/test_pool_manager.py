@@ -128,7 +128,10 @@ def test_pool_manager_initialization(db_path, workspace_path, worker_configs):
         assert manager.network_name == 'test-network'
         assert manager.running is True
         assert manager.job_queue is not None
-        mock_docker.assert_called_once()
+        # Docker client is now lazily initialized
+        assert manager.docker_client is None
+        # Docker client should not be initialized until needed
+        mock_docker.assert_not_called()
 
 
 def test_pool_manager_start_pools(db_path, workspace_path, worker_configs):

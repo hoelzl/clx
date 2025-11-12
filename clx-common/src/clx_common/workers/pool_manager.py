@@ -194,6 +194,10 @@ class WorkerPoolManager:
 
     def _ensure_network_exists(self):
         """Ensure Docker network exists, create if needed."""
+        # Lazily initialize Docker client if needed
+        if self.docker_client is None:
+            self.docker_client = docker.from_env()
+
         try:
             self.docker_client.networks.get(self.network_name)
             logger.info(f"Docker network '{self.network_name}' exists")

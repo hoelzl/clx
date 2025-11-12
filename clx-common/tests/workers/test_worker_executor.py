@@ -1,5 +1,6 @@
 """Tests for worker_executor module."""
 
+import sys
 import tempfile
 import time
 import subprocess
@@ -397,7 +398,8 @@ class TestDirectWorkerExecutor:
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_process.poll.return_value = None  # Process is running
-        mock_process.wait.side_effect = subprocess.TimeoutExpired('cmd', 10)
+        # First call to wait times out, second call succeeds
+        mock_process.wait.side_effect = [subprocess.TimeoutExpired('cmd', 10), None]
         mock_popen.return_value = mock_process
 
         executor = DirectWorkerExecutor(
@@ -416,15 +418,16 @@ class TestDirectWorkerExecutor:
 
         # Try to stop worker (should handle timeout)
         with patch('os.killpg') as mock_killpg, \
-             patch('os.getpgid') as mock_getpgid:
+             patch('os.getpgid') as mock_getpgid, \
+             patch('sys.platform', 'linux'):
             mock_getpgid.return_value = 12345
             result = executor.stop_worker(worker_id)
 
         # Should still return True after force kill
         assert result is True
 
-        # Verify SIGKILL was sent after timeout
-        if os.name != 'nt':  # Unix only
+        # Verify SIGKILL was sent after timeout on Unix
+        if sys.platform != 'win32':
             # Should have been called twice: SIGTERM then SIGKILL
             assert mock_killpg.call_count == 2
 
@@ -453,13 +456,17 @@ class TestDockerWorkerExecutor:
         assert len(executor.containers) == 0
 
     @patch('docker.DockerClient')
-    def test_start_worker(self, mock_docker, db_path, workspace_path):
+    @patch('docker.errors.NotFound')
+    def test_start_worker(self, mock_not_found, mock_docker, db_path, workspace_path):
         """Test starting a Docker worker."""
+        import docker.errors
+
         mock_client = MagicMock()
         mock_container = MagicMock()
         mock_container.id = 'abc123def456'
         mock_client.containers.run.return_value = mock_container
-        mock_client.containers.get.side_effect = Exception('Not found')
+        # Raise NotFound when checking for existing container
+        mock_client.containers.get.side_effect = docker.errors.NotFound('Container not found')
 
         executor = DockerWorkerExecutor(
             docker_client=mock_client,
@@ -496,14 +503,17 @@ class TestDockerWorkerExecutor:
         assert worker_id in executor.containers
 
     @patch('docker.DockerClient')
-    def test_stop_worker(self, mock_docker, db_path, workspace_path):
+    @patch('docker.errors.NotFound')
+    def test_stop_worker(self, mock_not_found, mock_docker, db_path, workspace_path):
         """Test stopping a Docker worker."""
+        import docker.errors
+
         mock_client = MagicMock()
         mock_container = MagicMock()
         mock_container.id = 'abc123def456'
         mock_container.status = 'running'
         mock_client.containers.run.return_value = mock_container
-        mock_client.containers.get.side_effect = Exception('Not found')
+        mock_client.containers.get.side_effect = docker.errors.NotFound('Container not found')
 
         executor = DockerWorkerExecutor(
             docker_client=mock_client,
@@ -532,13 +542,16 @@ class TestDockerWorkerExecutor:
         assert mock_container.remove.called
 
     @patch('docker.DockerClient')
-    def test_is_worker_running(self, mock_docker, db_path, workspace_path):
+    @patch('docker.errors.NotFound')
+    def test_is_worker_running(self, mock_not_found, mock_docker, db_path, workspace_path):
         """Test checking if Docker worker is running."""
+        import docker.errors
+
         mock_client = MagicMock()
         mock_container = MagicMock()
         mock_container.id = 'abc123def456'
         mock_container.status = 'running'
-        mock_client.containers.get.side_effect = Exception('Not found')
+        mock_client.containers.get.side_effect = docker.errors.NotFound('Container not found')
         mock_client.containers.run.return_value = mock_container
 
         executor = DockerWorkerExecutor(
