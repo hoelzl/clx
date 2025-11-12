@@ -41,7 +41,37 @@ def db_path():
     init_database(path)
     yield path
 
-    path.unlink(missing_ok=True)
+    # Close all connections and clean up WAL files on Windows
+    import sqlite3
+    import gc
+    gc.collect()  # Force garbage collection to close any lingering connections
+
+    # Force SQLite to checkpoint and close WAL files
+    try:
+        conn = sqlite3.connect(path)
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        conn.close()
+    except Exception:
+        pass
+
+    # Remove database files
+    try:
+        path.unlink(missing_ok=True)
+        # Also remove WAL and SHM files if they exist
+        for suffix in ['-wal', '-shm']:
+            wal_file = Path(str(path) + suffix)
+            wal_file.unlink(missing_ok=True)
+    except PermissionError:
+        # On Windows, if file is still locked, wait a moment and retry
+        import time
+        time.sleep(0.1)
+        try:
+            path.unlink(missing_ok=True)
+            for suffix in ['-wal', '-shm']:
+                wal_file = Path(str(path) + suffix)
+                wal_file.unlink(missing_ok=True)
+        except Exception:
+            pass  # Best effort cleanup
 
 
 @pytest.fixture
