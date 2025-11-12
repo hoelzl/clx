@@ -71,10 +71,29 @@ These tests use mocks and don't require Docker.
 
 Run the worker pool manager:
 
+#### Linux/Mac:
+
 ```bash
+# Create workspace directory
+mkdir -p test-workspace
+
 # Set environment variables
 export CLX_DB_PATH=clx_jobs.db
 export CLX_WORKSPACE_PATH=$(pwd)/test-workspace
+
+# Run pool manager (requires Docker images to exist)
+python -m clx_common.workers.pool_manager
+```
+
+#### Windows (PowerShell):
+
+```powershell
+# Create workspace directory
+New-Item -ItemType Directory -Force -Path test-workspace
+
+# Set environment variables
+$env:CLX_DB_PATH = "clx_jobs.db"
+$env:CLX_WORKSPACE_PATH = "$(Get-Location)\test-workspace"
 
 # Run pool manager (requires Docker images to exist)
 python -m clx_common.workers.pool_manager
@@ -97,17 +116,43 @@ The pool manager will:
 
 ## Building Docker Images
 
-Before running the pool manager with real workers, you need to build the Docker images:
+Before running the pool manager with real workers, you need to build the Docker images.
+
+**IMPORTANT:** Use the provided build scripts which automatically:
+- Extract the version from `clx-common/pyproject.toml`
+- Tag images with the correct names expected by the pool manager
+- Create both versioned and `:latest` tags
+
+### Linux/Mac:
 
 ```bash
 # Build all service images
-docker-compose build
+./build-services.sh
 
 # Or build individually
-docker build -t notebook-processor:0.2.2 ./services/notebook-processor
-docker build -t drawio-converter:0.2.2 ./services/drawio-converter
-docker build -t plantuml-converter:0.2.2 ./services/plantuml-converter
+./build-services.sh notebook-processor
+./build-services.sh drawio-converter
+./build-services.sh plantuml-converter
 ```
+
+### Windows (PowerShell):
+
+```powershell
+# Build all service images
+.\build-services.ps1
+
+# Or build individually
+.\build-services.ps1 notebook-processor
+.\build-services.ps1 drawio-converter
+.\build-services.ps1 plantuml-converter
+```
+
+The build scripts will tag images as:
+- `notebook-processor:0.2.2` and `notebook-processor:latest`
+- `drawio-converter:0.2.2` and `drawio-converter:latest`
+- `plantuml-converter:0.2.2` and `plantuml-converter:latest`
+
+(Plus `clx-*` prefixed versions for backward compatibility)
 
 ## Troubleshooting
 
