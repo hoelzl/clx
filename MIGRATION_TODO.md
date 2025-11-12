@@ -16,36 +16,77 @@
 
 **Test Results**: 28 tests passing (13 worker_base + 15 pool_manager)
 
-## Phase 2: Remove RabbitMQ from Workers 🔄 IN PROGRESS
+## Phase 2: Remove RabbitMQ from Workers ✅ ENTRYPOINTS COMPLETED
 
-### 2.1 Notebook Processor
-- [ ] Remove FastStream/RabbitMQ code from __main__.py
-- [ ] Create SQLite-only worker implementation
-- [ ] Update Dockerfile (remove FastStream dependencies)
-- [ ] Build and test new image
+### 2.1 Notebook Processor ✅
+- [x] Remove FastStream/RabbitMQ code from __main__.py
+- [x] SQLite-only worker implementation (already existed)
+- [ ] Update Dockerfile (remove FastStream dependencies - optional)
+- [ ] Build and test new image  **← USER ACTION REQUIRED**
 - [ ] Write integration tests
 
-### 2.2 DrawIO Converter
-- [ ] Remove FastStream/RabbitMQ code from __main__.py
-- [ ] Create SQLite-only worker implementation
-- [ ] Update Dockerfile (remove FastStream dependencies)
-- [ ] Build and test new image
+### 2.2 DrawIO Converter ✅
+- [x] Remove FastStream/RabbitMQ code from __main__.py
+- [x] SQLite-only worker implementation (already existed)
+- [ ] Update Dockerfile (remove FastStream dependencies - optional)
+- [ ] Build and test new image  **← USER ACTION REQUIRED**
 - [ ] Write integration tests
 
-### 2.3 PlantUML Converter
-- [ ] Remove FastStream/RabbitMQ code from __main__.py
-- [ ] Create SQLite-only worker implementation
-- [ ] Update Dockerfile (remove FastStream dependencies)
-- [ ] Build and test new image
+### 2.3 PlantUML Converter ✅
+- [x] Remove FastStream/RabbitMQ code from __main__.py
+- [x] SQLite-only worker implementation (already existed)
+- [ ] Update Dockerfile (remove FastStream dependencies - optional)
+- [ ] Build and test new image  **← USER ACTION REQUIRED**
 - [ ] Write integration tests
 
-### 2.4 Verification
-- [ ] All workers start successfully
-- [ ] Workers register in database
-- [ ] Workers process jobs correctly
+### 2.4 Verification 🔄 READY FOR TESTING
+- [ ] All workers start successfully  **← TEST AFTER REBUILD**
+- [ ] Workers register in database  **← TEST AFTER REBUILD**
+- [ ] Workers process jobs correctly  **← TEST AFTER REBUILD**
 - [ ] Health monitoring works
 - [ ] Auto-restart works
-- [ ] No RabbitMQ errors in logs
+- [ ] No RabbitMQ errors in logs  **← SHOULD BE FIXED NOW**
+
+## 🎯 USER ACTION REQUIRED
+
+**Pull latest changes and rebuild Docker images:**
+
+```powershell
+# Pull latest changes
+git pull origin claude/phase2-testing-option-2-011CV4HWjm6hCi8839ST3itB
+
+# Rebuild all service images
+.\build-services.ps1
+
+# Clean up database and containers
+python cleanup_workers.py
+docker rm -f $(docker ps -a -q --filter "name=clx-*-worker-*")
+
+# Test the pool manager
+$env:CLX_DB_PATH = "clx_jobs.db"
+$env:CLX_WORKSPACE_PATH = "$(Get-Location)\test-workspace"
+python -m clx_common.workers.pool_manager
+```
+
+**Expected Result:**
+```
+Starting worker pools with 3 configurations
+Docker network 'clx_app-network' exists
+Cleaning up stale worker records from database
+Starting 2 notebook workers...
+Started container: clx-notebook-worker-0 (abc123...)
+Starting notebook worker in SQLite mode
+Registered worker 1 (container: abc123...)
+Worker 1 registered: clx-notebook-worker-0 (abc123...)
+[... more workers starting ...]
+Started 4 workers total
+Worker pools started. Press Ctrl+C to stop.
+```
+
+**Success Criteria:**
+- ✅ No AMQP connection errors
+- ✅ Workers register successfully
+- ✅ Workers stay running (don't exit immediately)
 
 ## Phase 3: Update Course Processing (Backend)
 
