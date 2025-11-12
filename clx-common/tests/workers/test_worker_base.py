@@ -14,8 +14,8 @@ from clx_common.database.job_queue import JobQueue, Job
 from clx_common.workers.worker_base import Worker
 
 
-class TestWorker(Worker):
-    """Test worker implementation."""
+class MockWorker(Worker):
+    """Mock worker implementation for testing."""
 
     def __init__(self, worker_id: int, db_path: Path, poll_interval: float = 0.1):
         super().__init__(worker_id, 'test', db_path, poll_interval)
@@ -91,7 +91,7 @@ def worker_id(db_path):
 
 def test_worker_initialization(worker_id, db_path):
     """Test worker initialization."""
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
 
     assert worker.worker_id == worker_id
     assert worker.worker_type == 'test'
@@ -103,7 +103,7 @@ def test_worker_initialization(worker_id, db_path):
 
 def test_worker_custom_poll_interval(worker_id, db_path):
     """Test worker with custom poll interval."""
-    worker = TestWorker(worker_id, db_path, poll_interval=0.5)
+    worker = MockWorker(worker_id, db_path, poll_interval=0.5)
     assert worker.poll_interval == 0.5
 
 
@@ -121,7 +121,7 @@ def test_worker_processes_single_job(worker_id, db_path):
     queue.close()
 
     # Create worker and run in thread
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     thread = threading.Thread(target=worker.run)
     thread.start()
 
@@ -157,7 +157,7 @@ def test_worker_processes_multiple_jobs(worker_id, db_path):
     queue.close()
 
     # Create worker and run in thread
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     thread = threading.Thread(target=worker.run)
     thread.start()
 
@@ -186,7 +186,7 @@ def test_worker_handles_job_failure(worker_id, db_path):
     queue.close()
 
     # Create worker that fails
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     worker.should_fail = True
 
     thread = threading.Thread(target=worker.run)
@@ -225,7 +225,7 @@ def test_worker_updates_heartbeat(worker_id, db_path):
     time.sleep(0.1)
 
     # Run worker briefly
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     thread = threading.Thread(target=worker.run)
     thread.start()
 
@@ -260,7 +260,7 @@ def test_worker_updates_status(worker_id, db_path):
     queue.close()
 
     # Create worker with processing delay
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     worker.process_delay = 0.3
 
     thread = threading.Thread(target=worker.run)
@@ -312,7 +312,7 @@ def test_worker_tracks_statistics(worker_id, db_path):
     queue.close()
 
     # Run worker
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     thread = threading.Thread(target=worker.run)
     thread.start()
 
@@ -351,7 +351,7 @@ def test_worker_tracks_failed_statistics(worker_id, db_path):
     queue.close()
 
     # Run worker that fails
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     worker.should_fail = True
 
     thread = threading.Thread(target=worker.run)
@@ -377,7 +377,7 @@ def test_worker_tracks_failed_statistics(worker_id, db_path):
 
 def test_worker_stops_gracefully(worker_id, db_path):
     """Test worker stops gracefully."""
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
 
     thread = threading.Thread(target=worker.run)
     thread.start()
@@ -396,7 +396,7 @@ def test_worker_stops_gracefully(worker_id, db_path):
 
 def test_worker_handles_no_jobs(worker_id, db_path):
     """Test worker handles having no jobs to process."""
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
 
     thread = threading.Thread(target=worker.run)
     thread.start()
@@ -432,7 +432,7 @@ def test_worker_only_processes_own_type(worker_id, db_path):
     queue.close()
 
     # Run worker
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
     thread = threading.Thread(target=worker.run)
     thread.start()
 
@@ -453,7 +453,7 @@ def test_worker_only_processes_own_type(worker_id, db_path):
 
 def test_worker_sets_status_to_dead_on_shutdown(worker_id, db_path):
     """Test worker sets status to dead on shutdown."""
-    worker = TestWorker(worker_id, db_path)
+    worker = MockWorker(worker_id, db_path)
 
     thread = threading.Thread(target=worker.run)
     thread.start()
