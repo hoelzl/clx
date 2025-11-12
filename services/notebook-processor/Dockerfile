@@ -93,10 +93,6 @@ RUN python install.py --sys-prefix
 
 WORKDIR /app
 
-# Install Python dependencies with pip cache mount
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r base-requirements.txt
-
 # Copy and install service code
 COPY ${COMMON_PATH}/clx-common ./clx-common
 COPY ${SERVICE_PATH} ./notebook-processor
