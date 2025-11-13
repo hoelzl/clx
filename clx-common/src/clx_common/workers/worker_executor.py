@@ -416,9 +416,11 @@ class DirectWorkerExecutor(WorkerExecutor):
                 logger.info(f"Worker {worker_id} stopped gracefully")
             except subprocess.TimeoutExpired:
                 logger.warning(f"Worker {worker_id} did not stop gracefully, killing")
-                if sys.platform != 'win32':
+                if sys.platform != 'win32' and hasattr(signal, 'SIGKILL'):
+                    # Use SIGKILL on Unix if available
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 else:
+                    # Fall back to process.kill() on Windows or if SIGKILL not available
                     process.kill()
                 process.wait()
 

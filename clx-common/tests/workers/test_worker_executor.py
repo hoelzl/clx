@@ -238,9 +238,9 @@ class TestDirectWorkerExecutor:
         worker_id = executor.start_worker('notebook', 0, config)
         assert worker_id in executor.processes
 
-        # Stop worker
-        with patch('os.killpg') as mock_killpg, \
-             patch('os.getpgid') as mock_getpgid:
+        # Stop worker (use create=True for Windows compatibility where os.killpg doesn't exist)
+        with patch('os.killpg', create=True) as mock_killpg, \
+             patch('os.getpgid', create=True) as mock_getpgid:
             mock_getpgid.return_value = 12345
             result = executor.stop_worker(worker_id)
 
@@ -383,8 +383,8 @@ class TestDirectWorkerExecutor:
 
         assert len(executor.processes) == 3
 
-        # Cleanup all
-        with patch('os.killpg'), patch('os.getpgid'):
+        # Cleanup all (use create=True for Windows compatibility where os.killpg doesn't exist)
+        with patch('os.killpg', create=True), patch('os.getpgid', create=True):
             executor.cleanup()
 
         # All workers should be stopped
@@ -416,9 +416,9 @@ class TestDirectWorkerExecutor:
         # Start worker
         worker_id = executor.start_worker('notebook', 0, config)
 
-        # Try to stop worker (should handle timeout)
-        with patch('os.killpg') as mock_killpg, \
-             patch('os.getpgid') as mock_getpgid, \
+        # Try to stop worker (should handle timeout, use create=True for Windows compatibility)
+        with patch('os.killpg', create=True) as mock_killpg, \
+             patch('os.getpgid', create=True) as mock_getpgid, \
              patch('sys.platform', 'linux'):
             mock_getpgid.return_value = 12345
             result = executor.stop_worker(worker_id)

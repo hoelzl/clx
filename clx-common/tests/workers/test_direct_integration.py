@@ -4,10 +4,12 @@ These tests verify that workers can run directly as subprocesses
 and process actual jobs end-to-end.
 """
 
+import sys
 import tempfile
 import time
 import json
 from pathlib import Path
+from importlib.util import find_spec
 
 import pytest
 
@@ -15,6 +17,27 @@ from clx_common.database.schema import init_database
 from clx_common.database.job_queue import JobQueue
 from clx_common.workers.pool_manager import WorkerPoolManager
 from clx_common.workers.worker_executor import WorkerConfig
+
+
+# Check if worker modules are available
+def check_worker_module_available(module_name: str) -> bool:
+    """Check if a worker module can be imported."""
+    try:
+        return find_spec(module_name) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
+# Check availability of worker modules
+NOTEBOOK_WORKER_AVAILABLE = check_worker_module_available('nb.notebook_server')
+DRAWIO_WORKER_AVAILABLE = check_worker_module_available('drawio_converter.drawio_worker')
+PLANTUML_WORKER_AVAILABLE = check_worker_module_available('plantuml_converter.plantuml_converter')
+
+# Skip all integration tests if notebook worker is not available
+pytestmark = pytest.mark.skipif(
+    not NOTEBOOK_WORKER_AVAILABLE,
+    reason="Worker modules not available - these are true integration tests requiring full worker setup"
+)
 
 
 @pytest.fixture
@@ -95,6 +118,10 @@ class TestDirectWorkerIntegration:
         finally:
             manager.stop_pools()
 
+    @pytest.mark.skipif(
+        not DRAWIO_WORKER_AVAILABLE,
+        reason="DrawIO worker module not available"
+    )
     def test_multiple_direct_workers(self, db_path, workspace_path):
         """Test starting multiple direct workers of different types."""
         configs = [
@@ -175,6 +202,7 @@ class TestDirectWorkerIntegration:
             job_type='notebook',
             input_file=str(test_notebook),
             output_file=str(output_file),
+            content_hash='test-hash-123',
             payload={'kernel': 'python3', 'timeout': 60}
         )
 
