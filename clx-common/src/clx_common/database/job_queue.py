@@ -13,6 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from clx_common.monitoring.integration import (
+    safe_record_job_event,
+    safe_update_job_state,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,6 +123,30 @@ class JobQueue:
         logger.info(
             f"Job #{job_id} submitted: {job_type} for {input_file}"
             + (f" [correlation_id: {correlation_id}]" if correlation_id else "")
+        )
+
+        # Record job submitted event
+        safe_record_job_event(
+            event_type='job_submitted',
+            job_id=job_id,
+            job_type=job_type,
+            status='pending',
+            input_file=input_file,
+            correlation_id=correlation_id,
+            message=f"Job {job_id} submitted for {input_file}"
+        )
+
+        # Update job state in monitoring DB
+        safe_update_job_state(
+            db_path=self.db_path,
+            job_id=job_id,
+            job_type=job_type,
+            status='pending',
+            input_file=input_file,
+            output_file=output_file,
+            content_hash=content_hash,
+            correlation_id=correlation_id,
+            priority=priority
         )
 
         return job_id
@@ -292,6 +321,31 @@ class JobQueue:
                     f"Job #{job_id} completed{duration_str} "
                     f"[worker: {job.worker_id}, file: {job.input_file}]"
                 )
+
+                # Record job completed event
+                safe_record_job_event(
+                    event_type='job_completed',
+                    job_id=job_id,
+                    job_type=job.job_type,
+                    status='completed',
+                    input_file=job.input_file,
+                    worker_id=job.worker_id,
+                    correlation_id=job.correlation_id,
+                    message=f"Job {job_id} completed{duration_str}",
+                    processing_time_seconds=duration
+                )
+
+                # Update job state in monitoring DB
+                safe_update_job_state(
+                    db_path=self.db_path,
+                    job_id=job_id,
+                    job_type=job.job_type,
+                    status='completed',
+                    input_file=job.input_file,
+                    output_file=job.output_file,
+                    worker_id=job.worker_id,
+                    correlation_id=job.correlation_id
+                )
         elif status == 'failed':
             conn.execute(
                 """
@@ -307,6 +361,32 @@ class JobQueue:
                 logger.error(
                     f"Job #{job_id} FAILED: {error} "
                     f"[worker: {job.worker_id}, file: {job.input_file}]"
+                )
+
+                # Record job failed event
+                safe_record_job_event(
+                    event_type='job_failed',
+                    job_id=job_id,
+                    job_type=job.job_type,
+                    status='failed',
+                    input_file=job.input_file,
+                    worker_id=job.worker_id,
+                    correlation_id=job.correlation_id,
+                    message=f"Job {job_id} failed",
+                    error=error
+                )
+
+                # Update job state in monitoring DB
+                safe_update_job_state(
+                    db_path=self.db_path,
+                    job_id=job_id,
+                    job_type=job.job_type,
+                    status='failed',
+                    input_file=job.input_file,
+                    output_file=job.output_file,
+                    worker_id=job.worker_id,
+                    correlation_id=job.correlation_id,
+                    error_message=error
                 )
         else:
             conn.execute(

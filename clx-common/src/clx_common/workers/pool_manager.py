@@ -24,6 +24,7 @@ from clx_common.workers.worker_executor import (
     DockerWorkerExecutor,
     DirectWorkerExecutor
 )
+from clx_common.monitoring.integration import safe_record_system_event
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +252,15 @@ class WorkerPoolManager:
                 if worker_info:
                     self.workers[config.worker_type].append(worker_info)
 
-        logger.info(
-            f"Started {sum(len(workers) for workers in self.workers.values())} workers total"
+        total_workers = sum(len(workers) for workers in self.workers.values())
+        logger.info(f"Started {total_workers} workers total")
+
+        # Record pool started event
+        safe_record_system_event(
+            event_type='pool_started',
+            message=f"Worker pool started with {total_workers} workers",
+            worker_count=total_workers,
+            worker_configs=len(self.worker_configs)
         )
 
     def _wait_for_worker_registration(
@@ -608,6 +616,13 @@ class WorkerPoolManager:
                 logger.error(f"Error cleaning up executor: {e}")
 
         logger.info(f"Stopped {total_stopped} workers")
+
+        # Record pool stopped event
+        safe_record_system_event(
+            event_type='pool_stopped',
+            message=f"Worker pool stopped ({total_stopped} workers)",
+            workers_stopped=total_stopped
+        )
 
     def get_worker_stats(self) -> Dict:
         """Get statistics about all workers.

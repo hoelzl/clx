@@ -13,6 +13,11 @@ from typing import Optional
 from datetime import datetime
 
 from clx_common.database.job_queue import JobQueue, Job
+from clx_common.monitoring.integration import (
+    safe_record_worker_event,
+    safe_update_worker_state,
+    safe_update_worker_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +162,15 @@ class Worker(ABC):
         self._update_status('idle')
         self._update_heartbeat()
 
+        # Record worker started event
+        safe_record_worker_event(
+            event_type='worker_started',
+            worker_id=self.worker_id,
+            worker_type=self.worker_type,
+            status='idle',
+            message=f"Worker {self.worker_id} ({self.worker_type}) started"
+        )
+
         while self.running:
             try:
                 # Get next job
@@ -174,6 +188,16 @@ class Worker(ABC):
                     f"({job.job_type}): {job.input_file} -> {job.output_file}"
                 )
                 self._update_status('busy')
+
+                # Record job started event
+                safe_record_worker_event(
+                    event_type='worker_processing_job',
+                    worker_id=self.worker_id,
+                    worker_type=self.worker_type,
+                    status='busy',
+                    job_id=job.id,
+                    message=f"Processing {job.input_file}"
+                )
 
                 start_time = time.time()
 
@@ -194,6 +218,14 @@ class Worker(ABC):
                     # Update worker stats
                     self._update_stats(success=True, processing_time=processing_time)
 
+                    # Update monitoring stats
+                    safe_update_worker_stats(
+                        db_path=self.db_path,
+                        worker_id=self.worker_id,
+                        jobs_processed_delta=1,
+                        processing_time_seconds=processing_time
+                    )
+
                 except Exception as e:
                     processing_time = time.time() - start_time
 
@@ -208,6 +240,23 @@ class Worker(ABC):
 
                     # Update worker stats
                     self._update_stats(success=False, processing_time=processing_time)
+
+                    # Update monitoring stats
+                    safe_update_worker_stats(
+                        db_path=self.db_path,
+                        worker_id=self.worker_id,
+                        jobs_failed_delta=1
+                    )
+
+                    # Record job failed event
+                    safe_record_worker_event(
+                        event_type='worker_job_failed',
+                        worker_id=self.worker_id,
+                        worker_type=self.worker_type,
+                        status='idle',  # Will be set back to idle in finally
+                        job_id=job.id,
+                        message=f"Job {job.id} failed: {str(e)[:100]}"
+                    )
 
                 finally:
                     # Always return to idle and update heartbeat
@@ -226,6 +275,15 @@ class Worker(ABC):
 
         # Mark as dead on shutdown
         self._update_status('dead')
+
+        # Record worker stopped event
+        safe_record_worker_event(
+            event_type='worker_stopped',
+            worker_id=self.worker_id,
+            worker_type=self.worker_type,
+            status='dead',
+            message=f"Worker {self.worker_id} ({self.worker_type}) stopped"
+        )
 
     def stop(self):
         """Stop the worker gracefully."""

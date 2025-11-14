@@ -6,8 +6,22 @@ replacing extensive logging with structured, queryable state tracking.
 Key Components:
 - schema: Database schema definition and initialization
 - monitor_db: Database operations for monitoring data
-- event_bus: Asynchronous event recording (coming in Phase 2)
-- queries: Pre-defined queries for common use cases (coming in Phase 3)
+- event_bus: Asynchronous event recording
+- integration: Safe integration helpers for existing components
+- queries: Pre-defined queries for common use cases (coming in Phase 4)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
+
+# Export key integration functions for easier importing
+from clx_common.monitoring.integration import (
+    enable_monitoring,
+    disable_monitoring,
+    is_monitoring_available,
+)
+
+__all__ = [
+    'enable_monitoring',
+    'disable_monitoring',
+    'is_monitoring_available',
+]
