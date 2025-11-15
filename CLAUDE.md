@@ -799,8 +799,136 @@ The project is moving toward:
 
 Prefer SQLite-based implementations and direct worker execution when contributing new features.
 
+## Documentation Guidelines for AI Assistants
+
+### Documentation Structure
+
+The CLX documentation is organized to serve different audiences:
+
+**Root Level** (essential files only):
+- `README.md` - User-facing introduction and quick start
+- `CLAUDE.md` - AI assistant guide (this file)
+- `CONTRIBUTING.md` - Developer getting started guide
+- `LICENSE` - Project license
+
+**docs/** folder structure:
+```
+docs/
+├── user-guide/              # End-user documentation
+│   ├── README.md            # User guide overview
+│   ├── installation.md      # Installation instructions
+│   ├── quick-start.md       # 5-minute tutorial
+│   ├── configuration.md     # Course configuration options
+│   └── troubleshooting.md   # Common issues and solutions
+│
+├── developer-guide/         # Developer/contributor documentation
+│   ├── README.md            # Developer guide overview
+│   ├── architecture.md      # System architecture
+│   ├── building.md          # Building Docker services
+│   ├── testing.md           # Testing guidelines
+│   ├── direct_worker_execution.md      # Direct worker mode
+│   └── IMPLEMENTATION_SUMMARY.md       # Technical details
+│
+└── archive/                 # Historical documents
+    ├── migration-history/   # Architecture migration docs (2025-11)
+    │   └── README.md        # Context and index
+    └── phases/              # Phase-by-phase migration docs
+        └── README.md        # Phase summaries
+```
+
+### When to Update Documentation
+
+**User-Facing Changes**:
+When adding or modifying features that affect end users:
+1. Update `docs/user-guide/` as appropriate
+2. Add examples to `docs/user-guide/quick-start.md`
+3. Update `docs/user-guide/configuration.md` for new options
+4. Add troubleshooting tips to `docs/user-guide/troubleshooting.md`
+5. Update root `README.md` if it affects the quick start
+
+**Architecture Changes**:
+When changing system architecture or adding infrastructure:
+1. Update `docs/developer-guide/architecture.md`
+2. Update this file (`CLAUDE.md`) for AI assistant context
+3. Update `CONTRIBUTING.md` if workflow changes
+
+**New Development Documents**:
+When creating requirements, design docs, or implementation plans:
+1. **Active Work**: Place in `.claude/` directory (e.g., `.claude/requirements/`, `.claude/design/`)
+2. **Completed Work**: Move to `docs/developer-guide/` if still relevant
+3. **Historical**: Move to `docs/archive/` with context README
+
+### Documentation Maintenance
+
+**Keep Documentation Current**:
+- Update `CLAUDE.md` when project structure changes
+- Update developer guide when architecture evolves
+- Update user guide when features change
+- Archive historical documents, don't delete them
+
+**Documentation Style**:
+- **User docs**: Focus on what and how, not why or internals
+- **Developer docs**: Include architecture, design decisions, internals
+- **CLAUDE.md**: Comprehensive technical reference for AI assistants
+- **README.md**: Brief, welcoming, quick-start focused
+
+**Avoid Documentation Bloat**:
+- Don't create new markdown files in root directory
+- Don't create separate docs for minor features (add to existing)
+- Don't duplicate information (link to canonical source)
+- Archive outdated docs, don't leave them in root
+
+### Archiving Guidelines
+
+When archiving historical documents:
+
+1. **Add Context**: Create or update README.md in archive folder explaining:
+   - What the documents are about
+   - When they were created and why
+   - Why they're being archived
+   - Where to find current information
+
+2. **Preserve History**: Don't delete, archive with context
+
+3. **Update References**: Update any documents that link to archived files
+
+**Example Archive README**:
+```markdown
+# Historical Documents
+
+This folder contains documents from [time period] about [topic].
+
+## Background
+[Explain what was happening and why these docs were created]
+
+## Documents
+- `DOC.md` - [Brief description]
+
+## See Also
+- Current documentation: `docs/developer-guide/architecture.md`
+
+**Date Archived**: YYYY-MM-DD
+```
+
+### Cross-References
+
+When documenting features:
+- **User Guide** ← link to detailed config, troubleshooting
+- **Developer Guide** ← link to architecture, implementation details
+- **CLAUDE.md** ← comprehensive reference, link to all docs
+
+### Documentation Checklist
+
+When completing a task:
+- [ ] Updated relevant user documentation?
+- [ ] Updated developer documentation for architecture changes?
+- [ ] Updated CLAUDE.md if project structure changed?
+- [ ] Archived historical documents with context?
+- [ ] Removed any new files from root that belong in docs/?
+- [ ] Updated README.md if quick start affected?
+
 ---
 
-**Last Updated**: 2025-11-14 (Phase 5 complete)
+**Last Updated**: 2025-11-15 (Documentation reorganization complete)
 **Repository**: https://github.com/hoelzl/clx/
 **Issues**: https://github.com/hoelzl/clx/issues
