@@ -126,14 +126,14 @@ from clx.infrastructure.workers.worker_base import WorkerBase
 ```python
 # Old
 from clx_faststream_backend.sqlite_backend import SqliteBackend
-from clx_faststream_backend.faststream_backend import FastStreamBackend
 
 # New
 from clx.infrastructure.backends.sqlite_backend import SqliteBackend
-from clx.infrastructure.backends.faststream_backend import FastStreamBackend
 
 # Or (shorter)
-from clx.infrastructure.backends import SqliteBackend, FastStreamBackend
+from clx.infrastructure.backends import SqliteBackend
+
+# Note: FastStreamBackend (RabbitMQ) has been completely removed in post-v0.3.0 releases
 ```
 
 #### CLI
