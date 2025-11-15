@@ -31,7 +31,7 @@ CLX is a course content processing system that converts educational materials (J
 │              clx.infrastructure (Runtime)                   │
 │                                                             │
 │  Backend, Operation, JobQueue, Workers                      │
-│  ├── backends/ (SqliteBackend, FastStreamBackend)         │
+│  ├── backends/ (SqliteBackend, LocalOpsBackend, DummyBackend) │
 │  ├── database/ (schema, job_queue, db_operations)         │
 │  ├── messaging/ (payloads, results)                       │
 │  ├── workers/ (worker_base, pool_manager, executor)       │
@@ -181,7 +181,6 @@ class Worker(ABC):
 ```bash
 clx build <course.yaml>         # Build/convert course
 clx build --watch               # Watch for changes and auto-rebuild
-clx build --use-rabbitmq        # Use legacy RabbitMQ backend
 ```
 
 **File Watching**:
@@ -356,7 +355,6 @@ sections:
 - `@pytest.mark.integration` - Real workers, requires external tools
 - `@pytest.mark.e2e` - Full course conversion
 - `@pytest.mark.slow` - Long-running tests
-- `@pytest.mark.broker` - Requires RabbitMQ (legacy)
 
 **Test Organization**:
 ```
@@ -397,25 +395,29 @@ pytest -m ""           # Run ALL tests
 
 CLX has evolved significantly:
 
-**v0.1.x - v0.2.x**: RabbitMQ-based architecture
+**v0.1.x - v0.2.x**: Message broker-based architecture
 - 4 separate packages
-- RabbitMQ message broker
+- RabbitMQ message broker with FastStream framework
 - Prometheus + Grafana monitoring
-- FastStream framework
-- Message serialization
+- Message serialization overhead
 
 **v0.3.0** (November 2025): Simplified architecture
 - Single unified package
-- SQLite job queue
+- SQLite job queue (RabbitMQ/FastStream removed)
 - Direct file system access
 - No message broker required
 - Reduced from 8 Docker services to 3
+
+**Post-v0.3.0** (November 2025): Complete cleanup
+- Removed RabbitMQ/FastStream backend and all dependencies
+- Pure SQLite-based orchestration
+- Simplified backend architecture
 
 For detailed migration history, see `docs/archive/migration-history/`.
 
 ## Design Decisions
 
-### Why SQLite instead of RabbitMQ?
+### Why SQLite instead of a Message Broker?
 
 **Pros**:
 - ✅ No separate broker infrastructure
@@ -423,12 +425,13 @@ For detailed migration history, see `docs/archive/migration-history/`.
 - ✅ Built-in to Python (no external dependencies)
 - ✅ Direct file access (no serialization)
 - ✅ Easier debugging and testing
+- ✅ Simpler architecture
 
 **Cons**:
 - ❌ Single-host limitation (not distributed)
-- ❌ Lower write concurrency than RabbitMQ
+- ❌ Lower write concurrency than message brokers
 
-**Decision**: For CLX's use case (local development, educational content processing), simplicity and ease of use outweigh the scalability limitations.
+**Decision**: For CLX's use case (local development, educational content processing), simplicity and ease of use outweigh the scalability limitations. The project has completely removed RabbitMQ/FastStream in favor of pure SQLite orchestration.
 
 ### Why Direct Worker Execution?
 

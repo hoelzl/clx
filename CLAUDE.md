@@ -65,7 +65,8 @@ clx/                               # Repository root
 │   │   ├── operation.py           # Operation base class
 │   │   ├── backends/              # Backend implementations
 │   │   │   ├── sqlite_backend.py  # SQLite backend (primary)
-│   │   │   └── faststream_backend.py  # RabbitMQ backend (legacy)
+│   │   │   ├── local_ops_backend.py # Local operations backend
+│   │   │   └── dummy_backend.py   # Dummy backend for testing
 │   │   ├── database/              # SQLite job queue system
 │   │   │   ├── schema.py          # Database schema
 │   │   │   ├── job_queue.py       # Job queue operations
@@ -144,16 +145,16 @@ The CLX package is now a single unified package with three main subpackages repr
   - Operations: submit, poll, update status, cache results
 - **Worker Management**: Worker pools, executors, progress tracking
 - **Message Definitions**: Pydantic models for all service payloads/results
-- **Backends**: SqliteBackend (primary), FastStreamBackend (legacy)
+- **Backends**: SqliteBackend (primary), LocalOpsBackend, DummyBackend
 
 **Key Modules**:
-- `backends/` - Backend implementations (sqlite, faststream)
+- `backends/` - Backend implementations (sqlite, local_ops, dummy)
 - `database/` - SQLite job queue (schema, job_queue, db_operations)
 - `messaging/` - Message payloads and results
 - `workers/` - Worker management (worker_base, pool_manager, worker_executor)
 - `logging/`, `services/`, `utils/`
 
-**Dependencies**: `pydantic~=2.8.2`, `attrs`, `faststream[rabbit]`
+**Dependencies**: `pydantic~=2.8.2`, `attrs`
 
 #### 3. `clx.cli` - Command-Line Interface
 
@@ -254,13 +255,12 @@ from clx.cli.main import cli
 ```python
 markers = [
     "slow: mark tests as slow to run",
-    "broker: mark test that require a broker to run",
     "integration: mark tests as integration tests requiring full worker setup",
     "e2e: mark tests as end-to-end tests that test full course conversion",
 ]
 ```
 
-**Default Behavior**: Skips slow, broker, integration, and e2e tests
+**Default Behavior**: Skips slow, integration, and e2e tests
 
 ### Running Tests
 
@@ -432,7 +432,6 @@ echo $DISPLAY
 - **E2E tests**: Full course conversion, `@pytest.mark.e2e`
   - **Requires Xvfb** if course includes Draw.io diagrams
 - **Slow tests**: Long-running tests, `@pytest.mark.slow`
-- **Broker tests**: Require RabbitMQ, `@pytest.mark.broker`
 
 ### Test Logging
 
@@ -508,20 +507,17 @@ If these files are Git LFS pointers, the sessionStart hook will fall back to dow
 ### Running the CLI
 
 ```bash
-# Build/convert a course (uses SQLite backend by default)
+# Build/convert a course (uses SQLite backend)
 clx build /path/to/course.yaml
 
 # Watch for file changes and auto-rebuild
 clx build /path/to/course.yaml --watch
 
-# Use RabbitMQ backend (DEPRECATED - for backward compatibility only)
-clx build /path/to/course.yaml --use-rabbitmq
-
 # Additional options
 clx build /path/to/course.yaml --output-dir /path/to/output --log-level INFO
 ```
 
-**Note**: The default backend is now SQLite - no RabbitMQ setup required!
+**Note**: CLX uses SQLite for job orchestration - no message broker setup required!
 
 ### Building Docker Images
 
@@ -547,7 +543,7 @@ clx build /path/to/course.yaml --output-dir /path/to/output --log-level INFO
 
 ### Running Services with Docker Compose
 
-**Note**: As of Phase 5 (2025-11-14), docker-compose.yaml now uses the simplified SQLite-based architecture without RabbitMQ or monitoring stack.
+**Note**: docker-compose.yaml uses the SQLite-based architecture without any message broker.
 
 ```bash
 # Start all worker services
@@ -561,11 +557,6 @@ docker-compose down
 
 # Rebuild and restart
 docker-compose up -d --build
-```
-
-**Legacy RabbitMQ Setup**: If you need the old RabbitMQ-based setup, use `docker-compose.legacy.yaml`:
-```bash
-docker-compose -f docker-compose.legacy.yaml up -d
 ```
 
 ### Worker Management
@@ -667,15 +658,15 @@ DB_PATH = os.getenv("DB_PATH", "clx_jobs.db")
 6. Update `docker-compose.yaml`
 7. Add tests with appropriate markers
 
-### Creating a Migration
+### Making Architectural Changes
 
-When migrating from RabbitMQ to SQLite:
+When making significant architectural changes:
 
-1. Check `MIGRATION_PLAN.md` for current phase
-2. Update both backend implementations initially
-3. Add feature flags for testing
-4. Gradually phase out RabbitMQ code
-5. Update tests to use SQLite backend
+1. Document the design in `.claude/design/` or similar
+2. Create incremental migration plan if needed
+3. Update tests to validate new behavior
+4. Archive old design documents in `docs/archive/` when complete
+5. Update architecture documentation in `docs/developer-guide/architecture.md`
 
 ## Important Notes and Gotchas
 
@@ -723,13 +714,13 @@ When migrating from RabbitMQ to SQLite:
 
 ### Key Documents
 
-- `BUILD.md` - Docker build guide with BuildKit caching
-- `ARCHITECTURE_PROPOSAL.md` - Architecture simplification proposal
-- `MIGRATION_PLAN.md` - RabbitMQ to SQLite migration plan
-- `PHASE*_*.md` - Phase-specific documentation
-- `E2E_LOGGING.md` - End-to-end logging configuration
-- `docs/IMPLEMENTATION_SUMMARY.md` - Direct worker execution
-- `docs/direct_worker_execution.md` - User guide for direct workers
+- `docs/developer-guide/building.md` - Docker build guide with BuildKit caching
+- `docs/developer-guide/architecture.md` - Current system architecture
+- `docs/developer-guide/testing.md` - Testing and logging configuration
+- `docs/developer-guide/direct_worker_execution.md` - Direct worker execution guide
+- `docs/developer-guide/IMPLEMENTATION_SUMMARY.md` - Technical implementation details
+- `docs/archive/migration-history/` - Historical architecture migration documents
+- `docs/archive/phases/` - Phase-by-phase migration summaries
 
 ### API Documentation
 
@@ -788,16 +779,16 @@ Configuration in `.bumpversion.cfg`
 2. Check you're in the correct Python environment
 3. Verify all dependencies installed: `pip install -r requirements.txt`
 
-## Future Direction
+## Architecture Decisions
 
-The project is moving toward:
-- **Simplified architecture**: Reduce from 4 packages to fewer
-- **Remove infrastructure overhead**: Eliminate RabbitMQ, monitoring stack
-- **Direct file access**: No message serialization
-- **Easier debugging**: Simpler architecture, better logging
-- **Better testing**: Faster tests, easier setup
+The project has successfully completed its architecture simplification:
+- ✅ **Unified package**: Consolidated from 4 packages to 1 (v0.3.0)
+- ✅ **Pure SQLite**: Removed RabbitMQ/FastStream completely
+- ✅ **Direct file access**: No message serialization overhead
+- ✅ **Simpler debugging**: Streamlined architecture, comprehensive logging
+- ✅ **Faster testing**: Reduced test complexity
 
-Prefer SQLite-based implementations and direct worker execution when contributing new features.
+**Current Focus**: Stability, performance optimization, and feature enhancements on the SQLite-based architecture.
 
 ## Documentation Guidelines for AI Assistants
 
