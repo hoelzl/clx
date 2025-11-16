@@ -68,6 +68,10 @@ class JobQueue:
             SQLite connection object
         """
         if not hasattr(self._local, 'conn'):
+            # Ensure database schema is initialized (defensive programming)
+            from clx.infrastructure.database.schema import init_database
+            init_database(self.db_path)
+
             # Add 30 second busy timeout to handle lock contention gracefully
             self._local.conn = sqlite3.connect(
                 str(self.db_path),
