@@ -3,6 +3,7 @@ from pathlib import Path
 from attrs import define
 
 from clx.core.course_file import CourseFile
+from clx.core.utils.text_utils import sanitize_file_name
 from clx.infrastructure.operation import Operation
 
 
@@ -18,7 +19,8 @@ class PlantUmlFile(CourseFile):
 
     @property
     def img_path(self) -> Path:
-        return (self.path.parents[1] / "img" / self.path.stem).with_suffix(".png")
+        sanitized_name = sanitize_file_name(self.path.stem)
+        return (self.path.parents[1] / "img" / sanitized_name).with_suffix(".png")
 
     @property
     def source_outputs(self) -> frozenset[Path]:

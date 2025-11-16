@@ -32,6 +32,18 @@ else:
 
 PLANTUML_NAME_REGEX = re.compile(r'@startuml[ \t]+(?:"([^"]+)"|(\S+))')
 
+# Sanitization for file names (same as in clx.core.utils.text_utils)
+_PARENS_TO_REPLACE = "{}[]"
+_REPLACEMENT_PARENS = "()" * (len(_PARENS_TO_REPLACE) // 2)
+_CHARS_TO_REPLACE = r"/\$#%&<>*=^€|"
+_REPLACEMENT_CHARS = "_" * len(_CHARS_TO_REPLACE)
+_CHARS_TO_DELETE = r""";!?"'`.:"""
+_FILE_STRING_TRANSLATION_TABLE = str.maketrans(
+    _PARENS_TO_REPLACE + _CHARS_TO_REPLACE,
+    _REPLACEMENT_PARENS + _REPLACEMENT_CHARS,
+    _CHARS_TO_DELETE,
+)
+
 # Set up logging
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
@@ -42,6 +54,20 @@ logger = logging.getLogger(__name__)
 logger.info(f"Using PlantUML JAR: {PLANTUML_JAR}")
 
 
+def sanitize_file_name(text: str) -> str:
+    """Sanitize a file name by removing/replacing invalid characters.
+
+    Args:
+        text: Text to sanitize
+
+    Returns:
+        Sanitized text safe for use in file names
+    """
+    text = text.replace("C#", "CSharp")
+    sanitized_text = text.strip().translate(_FILE_STRING_TRANSLATION_TABLE)
+    return sanitized_text
+
+
 def get_plantuml_output_name(content, default="plantuml"):
     """Extract output name from PlantUML content.
 
@@ -50,7 +76,7 @@ def get_plantuml_output_name(content, default="plantuml"):
         default: Default name if not found in content
 
     Returns:
-        Output file name (without extension)
+        Output file name (without extension), sanitized for file system use
     """
     match = PLANTUML_NAME_REGEX.search(content)
     if match:
@@ -58,9 +84,9 @@ def get_plantuml_output_name(content, default="plantuml"):
         # Output name most likely commented out
         # This is not entirely accurate, but good enough for our purposes
         if "'" in name:
-            return default
-        return name
-    return default
+            return sanitize_file_name(default)
+        return sanitize_file_name(name)
+    return sanitize_file_name(default)
 
 
 async def convert_plantuml(input_file: Path, correlation_id: str):
