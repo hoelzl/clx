@@ -134,70 +134,70 @@ class WorkerPoolManager:
 
             removed_count = 0
             for worker_id, container_id in workers:
-            # Check if this is a direct worker or docker worker
-            is_direct = container_id.startswith('direct-')
+                # Check if this is a direct worker or docker worker
+                is_direct = container_id.startswith('direct-')
 
-            if is_direct:
-                # Direct worker - can't check if process is running from old session
-                # Just remove the stale record
-                logger.info(
-                    f"Worker {worker_id} is direct worker {container_id}, removing stale record"
-                )
-                conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
-                removed_count += 1
-            else:
-                # Docker worker - check if container exists
-                if docker_client is None:
+                if is_direct:
+                    # Direct worker - can't check if process is running from old session
+                    # Just remove the stale record
+                    logger.info(
+                        f"Worker {worker_id} is direct worker {container_id}, removing stale record"
+                    )
+                    conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                    removed_count += 1
+                else:
+                    # Docker worker - check if container exists
+                    if docker_client is None:
+                        try:
+                            import docker
+                            docker_client = docker.from_env()
+                            has_docker_workers = True
+                        except Exception as e:
+                            logger.warning(f"Could not initialize Docker client: {e}")
+                            # Remove record if we can't check
+                            conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                            removed_count += 1
+                            continue
+
                     try:
                         import docker
-                        docker_client = docker.from_env()
-                        has_docker_workers = True
+                        # Check if container still exists
+                        container = docker_client.containers.get(container_id)
+                        container.reload()
+
+                        # If container exists but is not running, remove it
+                        if container.status != 'running':
+                            logger.info(
+                                f"Worker {worker_id} container {container_id[:12]} is {container.status}, "
+                                f"removing container and worker record"
+                            )
+                            try:
+                                container.stop(timeout=2)
+                                container.remove()
+                            except Exception:
+                                pass  # Container might already be stopped
+
+                            conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                            removed_count += 1
+                        else:
+                            logger.info(
+                                f"Worker {worker_id} container {container_id[:12]} is still running, keeping it"
+                            )
+
+                    except docker.errors.NotFound:
+                        # Container doesn't exist, remove worker record
+                        logger.info(
+                            f"Worker {worker_id} container {container_id[:12]} not found, removing worker record"
+                        )
+                        conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+                        removed_count += 1
                     except Exception as e:
-                        logger.warning(f"Could not initialize Docker client: {e}")
-                        # Remove record if we can't check
+                        logger.warning(
+                            f"Error checking worker {worker_id} container {container_id[:12]}: {e}"
+                        )
+                        # On error, remove the worker record to be safe
                         conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
                         removed_count += 1
-                        continue
-
-                try:
-                    import docker
-                    # Check if container still exists
-                    container = docker_client.containers.get(container_id)
-                    container.reload()
-
-                    # If container exists but is not running, remove it
-                    if container.status != 'running':
-                        logger.info(
-                            f"Worker {worker_id} container {container_id[:12]} is {container.status}, "
-                            f"removing container and worker record"
-                        )
-                        try:
-                            container.stop(timeout=2)
-                            container.remove()
-                        except Exception:
-                            pass  # Container might already be stopped
-
-                        conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
-                        removed_count += 1
-                    else:
-                        logger.info(
-                            f"Worker {worker_id} container {container_id[:12]} is still running, keeping it"
-                        )
-
-                except docker.errors.NotFound:
-                    # Container doesn't exist, remove worker record
-                    logger.info(
-                        f"Worker {worker_id} container {container_id[:12]} not found, removing worker record"
-                    )
-                    conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
-                    removed_count += 1
-                except Exception as e:
-                    logger.warning(
-                        f"Error checking worker {worker_id} container {container_id[:12]}: {e}"
-                    )
-                    # On error, remove the worker record to be safe
-                    conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
-                    removed_count += 1
 
             conn.commit()
 
