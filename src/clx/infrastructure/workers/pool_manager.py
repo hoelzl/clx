@@ -114,21 +114,26 @@ class WorkerPoolManager:
         logger.info("Cleaning up stale worker records from database")
 
         conn = self.job_queue._get_conn()
-        cursor = conn.execute("SELECT id, container_id FROM workers")
-        workers = cursor.fetchall()
 
-        if not workers:
-            logger.info("No existing worker records found")
-            return
+        # Use explicit transaction for read-then-write operation
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            cursor = conn.execute("SELECT id, container_id FROM workers")
+            workers = cursor.fetchall()
 
-        logger.info(f"Found {len(workers)} existing worker record(s), checking status...")
+            if not workers:
+                logger.info("No existing worker records found")
+                conn.rollback()
+                return
 
-        # Initialize Docker client if we need to check containers
-        docker_client = None
-        has_docker_workers = False
+            logger.info(f"Found {len(workers)} existing worker record(s), checking status...")
 
-        removed_count = 0
-        for worker_id, container_id in workers:
+            # Initialize Docker client if we need to check containers
+            docker_client = None
+            has_docker_workers = False
+
+            removed_count = 0
+            for worker_id, container_id in workers:
             # Check if this is a direct worker or docker worker
             is_direct = container_id.startswith('direct-')
 
@@ -194,12 +199,16 @@ class WorkerPoolManager:
                     conn.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
                     removed_count += 1
 
-        conn.commit()
+            conn.commit()
 
-        if removed_count > 0:
-            logger.info(f"Removed {removed_count} stale worker record(s)")
-        else:
-            logger.info("No stale workers to remove")
+            if removed_count > 0:
+                logger.info(f"Removed {removed_count} stale worker record(s)")
+            else:
+                logger.info("No stale workers to remove")
+
+        except Exception:
+            conn.rollback()
+            raise
 
     def _ensure_network_exists(self):
         """Ensure Docker network exists, create if needed."""
@@ -423,7 +432,6 @@ class WorkerPoolManager:
                                 "UPDATE workers SET status = 'dead' WHERE id = ?",
                                 (worker_id,)
                             )
-                            conn.commit()
                             continue
 
                         executor = self.executors[executor_type]
@@ -439,7 +447,6 @@ class WorkerPoolManager:
                                     "UPDATE workers SET status = 'dead' WHERE id = ?",
                                     (worker_id,)
                                 )
-                                conn.commit()
                                 continue
 
                             # Get worker stats
@@ -458,7 +465,6 @@ class WorkerPoolManager:
                                         "UPDATE workers SET status = 'hung' WHERE id = ?",
                                         (worker_id,)
                                     )
-                                    conn.commit()
 
                                     # Optionally restart hung workers
                                     # self._restart_worker(worker_id, executor_id, worker_type)
@@ -550,7 +556,6 @@ class WorkerPoolManager:
                 "UPDATE workers SET status = 'dead' WHERE id = ?",
                 (worker_id,)
             )
-            conn.commit()
 
             # Find the worker config and restart
             for config in self.worker_configs:
@@ -595,7 +600,6 @@ class WorkerPoolManager:
                         "UPDATE workers SET status = 'dead' WHERE id = ?",
                         (worker_info['db_worker_id'],)
                     )
-                    conn.commit()
 
                 except Exception as e:
                     logger.error(f"Error stopping worker: {e}")
