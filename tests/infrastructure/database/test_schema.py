@@ -24,7 +24,7 @@ def test_database_initialization():
         tables = {row[0] for row in cursor.fetchall()}
 
         assert 'jobs' in tables, "jobs table should exist"
-        assert 'results_cache' in tables, "results_cache table should exist"
+        assert 'results_cache' not in tables, "results_cache table should NOT be in jobs DB (moved to cache DB)"
         assert 'workers' in tables, "workers table should exist"
         assert 'schema_version' in tables, "schema_version table should exist"
 
@@ -49,7 +49,7 @@ def test_database_indexes():
 
         assert 'idx_jobs_status' in indexes, "jobs status index should exist"
         assert 'idx_jobs_content_hash' in indexes, "jobs content_hash index should exist"
-        assert 'idx_cache_lookup' in indexes, "cache lookup index should exist"
+        assert 'idx_cache_lookup' not in indexes, "cache lookup index should NOT be in jobs DB (moved to cache DB)"
         assert 'idx_workers_status' in indexes, "workers status index should exist"
 
         conn.close()
@@ -174,12 +174,19 @@ def test_status_constraint():
 
 
 def test_results_cache_unique_constraint():
-    """Test that results_cache enforces unique constraint."""
+    """Test that results_cache enforces unique constraint in cache DB."""
+    from clx.infrastructure.database.db_operations import DatabaseManager
+
     with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as f:
-        db_path = Path(f.name)
+        cache_db_path = Path(f.name)
 
     try:
-        conn = init_database(db_path)
+        # Initialize cache database
+        with DatabaseManager(cache_db_path, force_init=False) as db_manager:
+            pass  # Initialization happens in __enter__
+
+        # Now test the constraint
+        conn = sqlite3.connect(str(cache_db_path))
 
         # Insert first entry
         conn.execute(
@@ -200,7 +207,7 @@ def test_results_cache_unique_constraint():
 
         conn.close()
     finally:
-        db_path.unlink(missing_ok=True)
+        cache_db_path.unlink(missing_ok=True)
 
 
 def test_idempotent_initialization():

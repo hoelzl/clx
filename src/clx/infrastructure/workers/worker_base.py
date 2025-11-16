@@ -32,6 +32,7 @@ class Worker(ABC):
         worker_id: int,
         worker_type: str,
         db_path: Path,
+        cache_db_path: Optional[Path] = None,
         poll_interval: float = 0.1,
         job_timeout: Optional[float] = None
     ):
@@ -40,16 +41,18 @@ class Worker(ABC):
         Args:
             worker_id: Unique worker ID (from workers table)
             worker_type: Type of jobs to process ('notebook', 'drawio', 'plantuml')
-            db_path: Path to SQLite database
+            db_path: Path to SQLite job queue database
+            cache_db_path: Path to SQLite cache database (optional, defaults to db_path)
             poll_interval: Time to wait between polls when no jobs available (seconds)
             job_timeout: Maximum time a job can run before being considered hung (seconds, default: None = no timeout)
         """
         self.worker_id = worker_id
         self.worker_type = worker_type
         self.db_path = db_path
+        self.cache_db_path = cache_db_path or db_path
         self.poll_interval = poll_interval
         self.job_timeout = job_timeout or float('inf')  # Default to infinity (no timeout)
-        self.job_queue = JobQueue(db_path)
+        self.job_queue = JobQueue(db_path, cache_db_path=self.cache_db_path)
         self.running = True
         self._last_heartbeat = datetime.now()
 

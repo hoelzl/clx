@@ -27,6 +27,7 @@ from nb.output_spec import create_output_spec
 # Configuration
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 DB_PATH = Path(os.environ.get("DB_PATH", "/db/jobs.db"))
+CACHE_DB_PATH = Path(os.environ.get("CACHE_DB_PATH", os.environ.get("DB_PATH", "/db/cache.db")))
 
 # Logging setup
 logging.basicConfig(
@@ -39,14 +40,15 @@ logger = logging.getLogger(__name__)
 class NotebookWorker(Worker):
     """Worker that processes notebook jobs from SQLite queue."""
 
-    def __init__(self, worker_id: int, db_path: Path):
+    def __init__(self, worker_id: int, db_path: Path, cache_db_path: Optional[Path] = None):
         """Initialize notebook worker.
 
         Args:
             worker_id: Worker ID from database
-            db_path: Path to SQLite database
+            db_path: Path to SQLite job queue database
+            cache_db_path: Path to SQLite cache database (optional)
         """
-        super().__init__(worker_id, 'notebook', db_path)
+        super().__init__(worker_id, 'notebook', db_path, cache_db_path=cache_db_path)
         # Create persistent event loop for this worker
         self._loop = None
         logger.info(f"NotebookWorker {worker_id} initialized")
@@ -248,7 +250,7 @@ def main():
     worker_id = register_worker(DB_PATH)
 
     # Create and run worker
-    worker = NotebookWorker(worker_id, DB_PATH)
+    worker = NotebookWorker(worker_id, DB_PATH, cache_db_path=CACHE_DB_PATH)
 
     try:
         worker.run()

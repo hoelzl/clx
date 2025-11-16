@@ -11,6 +11,7 @@ import asyncio
 import sqlite3
 import time
 from pathlib import Path
+from typing import Optional
 from base64 import b64decode, b64encode
 
 # Add clx-common to path if running standalone
@@ -23,6 +24,7 @@ from clx.infrastructure.database.schema import init_database
 # Configuration
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 DB_PATH = Path(os.environ.get("DB_PATH", "/db/jobs.db"))
+CACHE_DB_PATH = Path(os.environ.get("CACHE_DB_PATH", os.environ.get("DB_PATH", "/db/cache.db")))
 
 # Logging setup
 logging.basicConfig(
@@ -35,14 +37,15 @@ logger = logging.getLogger(__name__)
 class DrawioWorker(Worker):
     """Worker that processes DrawIO conversion jobs from SQLite queue."""
 
-    def __init__(self, worker_id: int, db_path: Path):
+    def __init__(self, worker_id: int, db_path: Path, cache_db_path: Optional[Path] = None):
         """Initialize DrawIO worker.
 
         Args:
             worker_id: Worker ID from database
-            db_path: Path to SQLite database
+            db_path: Path to SQLite job queue database
+            cache_db_path: Path to SQLite cache database (optional)
         """
-        super().__init__(worker_id, 'drawio', db_path)
+        super().__init__(worker_id, 'drawio', db_path, cache_db_path=cache_db_path)
         # Create persistent event loop for this worker
         self._loop = None
         logger.info(f"DrawioWorker {worker_id} initialized")
@@ -253,7 +256,7 @@ def main():
     worker_id = register_worker(DB_PATH)
 
     # Create and run worker
-    worker = DrawioWorker(worker_id, DB_PATH)
+    worker = DrawioWorker(worker_id, DB_PATH, cache_db_path=CACHE_DB_PATH)
 
     try:
         worker.run()

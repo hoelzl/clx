@@ -155,6 +155,7 @@ async def main(
 
         backend = SqliteBackend(
             db_path=jobs_db_path,
+            cache_db_path=cache_db_path,
             workspace_path=output_dir,
             db_manager=db_manager,
             ignore_db=ignore_db

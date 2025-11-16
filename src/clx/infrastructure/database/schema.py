@@ -41,21 +41,6 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, job_type);
 CREATE INDEX IF NOT EXISTS idx_jobs_content_hash ON jobs(content_hash);
 
--- Results cache table
-CREATE TABLE IF NOT EXISTS results_cache (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    output_file TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    result_metadata TEXT,  -- JSON
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    access_count INTEGER DEFAULT 0,
-
-    UNIQUE(output_file, content_hash)
-);
-
-CREATE INDEX IF NOT EXISTS idx_cache_lookup ON results_cache(output_file, content_hash);
-
 -- Workers table
 CREATE TABLE IF NOT EXISTS workers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
