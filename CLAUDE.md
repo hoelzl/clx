@@ -751,8 +751,8 @@ When making significant architectural changes:
 ### Database
 
 - **SQLite databases** (two separate databases):
-  - `clx_jobs.db` - Job queue database (stores jobs, workers, events, results_cache tables)
-  - `clx_cache.db` - Cache database (stores processed_files table with pickled results)
+  - `clx_jobs.db` - Job queue database (stores jobs, workers, worker_events, schema_version tables)
+  - `clx_cache.db` - Cache database (stores processed_files and results_cache tables)
 - **Why two databases**:
   - Different lifetimes (job queue is ephemeral, cache persists)
   - Different access patterns (job queue is write-heavy, cache is read-heavy)

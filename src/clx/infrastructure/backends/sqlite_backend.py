@@ -31,6 +31,7 @@ class SqliteBackend(LocalOpsBackend):
     """
 
     db_path: Path = Path('clx_jobs.db')
+    cache_db_path: Optional[Path] = None
     workspace_path: Path = Path.cwd()
     job_queue: JobQueue | None = field(init=False, default=None)
     db_manager: DatabaseManager | None = None
@@ -46,8 +47,12 @@ class SqliteBackend(LocalOpsBackend):
         """Initialize SQLite database and job queue."""
         # Database should already be initialized, but ensure it exists
         init_database(self.db_path)
-        self.job_queue = JobQueue(self.db_path)
-        logger.info(f"Initialized SQLite backend with database: {self.db_path}")
+
+        # Use cache_db_path if provided, otherwise use db_path for backward compatibility
+        actual_cache_db_path = self.cache_db_path or self.db_path
+
+        self.job_queue = JobQueue(self.db_path, cache_db_path=actual_cache_db_path)
+        logger.info(f"Initialized SQLite backend with job queue DB: {self.db_path}, cache DB: {actual_cache_db_path}")
 
         # Initialize progress tracker if enabled
         if self.enable_progress_tracking:

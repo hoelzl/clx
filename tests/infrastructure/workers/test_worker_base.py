@@ -17,8 +17,8 @@ from clx.infrastructure.workers.worker_base import Worker
 class MockWorker(Worker):
     """Mock worker implementation for testing."""
 
-    def __init__(self, worker_id: int, db_path: Path, poll_interval: float = 0.1):
-        super().__init__(worker_id, 'test', db_path, poll_interval)
+    def __init__(self, worker_id: int, db_path: Path, cache_db_path = None, poll_interval: float = 0.1):
+        super().__init__(worker_id, 'test', db_path, cache_db_path=cache_db_path, poll_interval=poll_interval)
         self.processed_jobs = []
         self.should_fail = False
         self.process_delay = 0.0
@@ -103,7 +103,8 @@ def test_worker_initialization(worker_id, db_path):
 
 def test_worker_custom_poll_interval(worker_id, db_path):
     """Test worker with custom poll interval."""
-    worker = MockWorker(worker_id, db_path, poll_interval=0.5)
+    # cache_db_path is optional, poll_interval is a keyword argument
+    worker = MockWorker(worker_id, db_path, cache_db_path=None, poll_interval=0.5)
     assert worker.poll_interval == 0.5
 
 

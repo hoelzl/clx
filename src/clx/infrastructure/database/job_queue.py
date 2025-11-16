@@ -51,21 +51,23 @@ class Job:
 class JobQueue:
     """Thread-safe job queue manager using SQLite."""
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, cache_db_path: Optional[Path] = None):
         """Initialize job queue.
 
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite job queue database file
+            cache_db_path: Path to SQLite cache database file (optional, defaults to db_path)
         """
         self.db_path = db_path
+        self.cache_db_path = cache_db_path or db_path
         self._local = threading.local()
         self._lock = threading.Lock()
 
     def _get_conn(self) -> sqlite3.Connection:
-        """Get thread-local database connection.
+        """Get thread-local database connection for job queue.
 
         Returns:
-            SQLite connection object
+            SQLite connection object for job queue database
         """
         if not hasattr(self._local, 'conn'):
             # Ensure database schema is initialized (defensive programming)
@@ -81,6 +83,31 @@ class JobQueue:
             )
             self._local.conn.row_factory = sqlite3.Row
         return self._local.conn
+
+    def _get_cache_conn(self) -> sqlite3.Connection:
+        """Get thread-local database connection for cache.
+
+        Returns:
+            SQLite connection object for cache database
+        """
+        if not hasattr(self._local, 'cache_conn'):
+            # Initialize cache database with proper schema
+            from clx.infrastructure.database.db_operations import DatabaseManager
+
+            # Use DatabaseManager to ensure cache schema is initialized
+            # We'll create a temporary manager just to init the database
+            with DatabaseManager(self.cache_db_path, force_init=False):
+                pass  # DatabaseManager.__enter__ will call init_db()
+
+            # Create thread-local connection
+            # check_same_thread=True (default) is safe because we use threading.local()
+            self._local.cache_conn = sqlite3.connect(
+                str(self.cache_db_path),
+                timeout=30.0,
+                isolation_level=None  # Enable autocommit mode for simple operations
+            )
+            self._local.cache_conn.row_factory = sqlite3.Row
+        return self._local.cache_conn
 
     def add_job(
         self,
@@ -137,7 +164,7 @@ class JobQueue:
         Returns:
             Result metadata if found, None otherwise
         """
-        conn = self._get_conn()
+        conn = self._get_cache_conn()
 
         # Use explicit transaction for read-then-write atomicity
         conn.execute("BEGIN IMMEDIATE")
@@ -185,7 +212,7 @@ class JobQueue:
             content_hash: Content hash
             result_metadata: Metadata about the result
         """
-        conn = self._get_conn()
+        conn = self._get_cache_conn()
         conn.execute(
             """
             INSERT OR REPLACE INTO results_cache
@@ -514,7 +541,10 @@ class JobQueue:
         return cursor.rowcount
 
     def close(self):
-        """Close database connection."""
+        """Close database connections."""
         if hasattr(self._local, 'conn'):
             self._local.conn.close()
             delattr(self._local, 'conn')
+        if hasattr(self._local, 'cache_conn'):
+            self._local.cache_conn.close()
+            delattr(self._local, 'cache_conn')

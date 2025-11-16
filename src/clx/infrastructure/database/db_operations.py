@@ -25,6 +25,13 @@ class DatabaseManager:
 
         if force:
             cursor.execute("DROP TABLE IF EXISTS processed_files")
+            cursor.execute("DROP TABLE IF EXISTS results_cache")
+
+        # Enable WAL mode for better concurrency
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA wal_autocheckpoint=1000")
+        cursor.execute("PRAGMA busy_timeout=30000")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
@@ -37,6 +44,26 @@ class DatabaseManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
+
+        # Results cache table (moved from jobs DB)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS results_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                output_file TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                result_metadata TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                access_count INTEGER DEFAULT 0,
+                UNIQUE(output_file, content_hash)
+            )
+            """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_cache_lookup
+            ON results_cache(output_file, content_hash)
+            """)
+
         self.conn.commit()
 
     def store_result(
