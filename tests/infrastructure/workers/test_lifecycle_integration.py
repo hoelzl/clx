@@ -137,13 +137,7 @@ class TestManagedWorkerLifecycle:
             manager.stop_managed_workers(workers)
 
     def test_start_managed_workers_reuse(self, db_path, workspace_path):
-        """Test that managed workers can be started multiple times without errors.
-
-        Note: With WAL mode's cleanup logic, stale worker records are removed,
-        which may result in fresh workers being started instead of reuse.
-        This test verifies that multiple start_managed_workers() calls succeed
-        without database errors.
-        """
+        """Test that managed workers can reuse existing healthy workers."""
         # Create configuration with reuse enabled (only notebook workers)
         cli_overrides = {
             "default_execution_mode": "direct",
@@ -168,26 +162,18 @@ class TestManagedWorkerLifecycle:
             workers1 = manager.start_managed_workers()
             time.sleep(2)
 
-            # Verify first set started successfully
-            assert len(workers1) == 1
-            assert workers1[0].worker_type == "notebook"
+            worker1_id = workers1[0].db_worker_id
 
-            # Try to start again (may reuse or start fresh depending on cleanup logic)
+            # Try to start again (should reuse)
             workers2 = manager.start_managed_workers()
 
-            # Should have same number of workers
+            # Should be same worker
             assert len(workers2) == 1
-            assert workers2[0].worker_type == "notebook"
-
-            # Workers may have different IDs after WAL cleanup - verify they're valid
-            assert workers2[0].db_worker_id > 0, "Worker should have valid database ID"
+            assert workers2[0].db_worker_id == worker1_id
 
         finally:
-            # Stop workers (both sets in case they're different)
-            if workers1:
-                manager.stop_managed_workers(workers1)
-            if 'workers2' in locals() and workers2 and workers2 != workers1:
-                manager.stop_managed_workers(workers2)
+            # Stop workers
+            manager.stop_managed_workers(workers1)
 
     def test_start_managed_workers_fresh(self, db_path, workspace_path):
         """Test that fresh workers option bypasses reuse."""

@@ -258,14 +258,8 @@ async def test_e2e_managed_workers_reuse_across_builds(
         started_workers2 = lifecycle_manager2.start_managed_workers()
         worker2_ids = [w.db_worker_id for w in started_workers2]
 
-        # With WAL mode cleanup, worker IDs may be reset between builds
-        # The important thing is that workers start successfully without database errors
-        assert len(started_workers2) == len(started_workers1), \
-            f"Should have same number of workers (first: {len(started_workers1)}, second: {len(started_workers2)})"
-
-        # Verify all worker IDs are valid (may be different from first build)
-        assert all(w.db_worker_id > 0 for w in started_workers2), \
-            "All workers should have valid database IDs"
+        # Should reuse same workers (same IDs)
+        assert worker1_ids == worker2_ids, "Should reuse existing workers"
 
         backend2 = SqliteBackend(
             db_path=db_path_fixture,
