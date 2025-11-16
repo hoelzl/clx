@@ -6,6 +6,7 @@ import signal
 from datetime import datetime
 from pathlib import Path
 from time import time
+from typing import Optional
 
 import click
 from watchdog.observers import Observer
@@ -1173,6 +1174,293 @@ def serve(host, port, db_path, no_browser, reload, cors_origin):
         click.echo(f"Error running server: {e}", err=True)
         logger.error(f"Server error: {e}", exc_info=True)
         raise SystemExit(1)
+
+
+def auto_detect_db_path() -> Optional[Path]:
+    """Auto-detect database path.
+
+    Checks in order:
+    1. clx_jobs.db (current directory)
+    2. clx_cache.db (current directory)
+    3. Most recently modified .db file in current directory
+
+    Returns:
+        Path to database file or None if not found
+    """
+    candidates = [
+        Path('clx_jobs.db'),
+        Path('clx_cache.db'),
+    ]
+
+    for path in candidates:
+        if path.exists():
+            logger.debug(f"Auto-detected database: {path}")
+            return path
+
+    # Find most recent .db file
+    db_files = list(Path('.').glob('*.db'))
+    if db_files:
+        most_recent = max(db_files, key=lambda p: p.stat().st_mtime)
+        logger.debug(f"Auto-detected database (most recent): {most_recent}")
+        return most_recent
+
+    return None
+
+
+async def resume_build(
+    db_path: Optional[Path],
+    reset_hung: bool,
+    timeout: int,
+    force_retry_failed: bool,
+    workspace: Optional[Path],
+):
+    """Resume processing incomplete jobs from database.
+
+    Args:
+        db_path: Path to SQLite database
+        reset_hung: Reset hung jobs before resuming
+        timeout: Maximum wait time in seconds
+        force_retry_failed: Reset failed jobs to retry them
+        workspace: Workspace path for writing output files
+
+    Returns:
+        Exit code (0=success, 1=failure, 2=timeout)
+    """
+    # 1. Auto-detect database path if not specified
+    if not db_path:
+        db_path = auto_detect_db_path()
+
+    if not db_path:
+        click.echo("Error: No database found", err=True)
+        click.echo("Searched for: clx_jobs.db, clx_cache.db, *.db")
+        click.echo("Use --db-path to specify database location")
+        return 1
+
+    if not db_path.exists():
+        click.echo(f"Error: Database not found: {db_path}", err=True)
+        return 1
+
+    click.echo(f"Using database: {db_path}")
+
+    # 2. Determine workspace path
+    if not workspace:
+        workspace = db_path.parent  # Default to database directory
+        click.echo(f"Using workspace: {workspace}")
+
+    # 3. Initialize job queue
+    from clx.infrastructure.database.job_queue import JobQueue
+
+    job_queue = JobQueue(db_path)
+
+    # 4. Check for incomplete jobs
+    incomplete_jobs = []
+
+    # Get pending jobs
+    pending = job_queue.get_jobs_by_status('pending', limit=10000)
+    incomplete_jobs.extend(pending)
+
+    # Get processing jobs (may be stuck or actively processing)
+    processing = job_queue.get_jobs_by_status('processing', limit=10000)
+    incomplete_jobs.extend(processing)
+
+    # Optionally include failed jobs
+    retryable_failed = []
+    if force_retry_failed:
+        failed = job_queue.get_jobs_by_status('failed', limit=10000)
+        # Filter to only retry jobs that haven't exceeded max attempts
+        retryable_failed = [j for j in failed if j.attempts < 3]  # max_attempts default is 3
+        incomplete_jobs.extend(retryable_failed)
+
+    if not incomplete_jobs:
+        click.echo("✓ No incomplete jobs found in database")
+        return 0
+
+    click.echo(f"\nFound {len(incomplete_jobs)} incomplete job(s):")
+    click.echo(f"  Pending:    {len(pending)}")
+    click.echo(f"  Processing: {len(processing)}")
+    if force_retry_failed:
+        click.echo(f"  Failed (retryable): {len(retryable_failed)}")
+
+    # 5. Reset hung jobs if requested
+    if reset_hung:
+        click.echo("\nResetting hung jobs...")
+        reset_count = job_queue.reset_hung_jobs(timeout_seconds=600)
+        if reset_count > 0:
+            click.echo(f"  ✓ Reset {reset_count} hung job(s)")
+        else:
+            click.echo(f"  No hung jobs found")
+
+    # 6. Check for available workers
+    from clx.infrastructure.workers.discovery import WorkerDiscovery
+
+    discovery = WorkerDiscovery(db_path)
+    workers = discovery.discover_workers(status_filter=['idle', 'busy'])
+
+    click.echo(f"\nWorker status:")
+    if not workers:
+        click.echo("  ⚠ Warning: No workers found", err=True)
+        click.echo("  Start workers with 'clx start-services' or 'clx build --no-auto-stop'")
+        click.echo("  Resume will wait for workers to become available...")
+    else:
+        click.echo(f"  ✓ Found {len(workers)} worker(s)")
+        from collections import Counter
+
+        counts = Counter(w.worker_type for w in workers)
+        for worker_type, count in sorted(counts.items()):
+            click.echo(f"    - {worker_type}: {count}")
+
+    # 7. Reset failed jobs to pending if force_retry_failed
+    if force_retry_failed and retryable_failed:
+        click.echo(f"\nRetrying {len(retryable_failed)} failed job(s)...")
+        for job in retryable_failed:
+            job_queue.update_job_status(job.id, 'pending')
+
+    # 8. Create backend and populate active_jobs
+    from clx.infrastructure.backends.sqlite_backend import SqliteBackend
+    from clx.infrastructure.database.db_operations import DatabaseManager
+
+    with DatabaseManager(db_path) as db_manager:
+        backend = SqliteBackend(
+            db_path=db_path,
+            workspace_path=workspace,
+            db_manager=db_manager,
+            max_wait_for_completion_duration=float(timeout),
+            skip_worker_check=True,  # We already checked workers above
+        )
+
+        # Populate active_jobs from incomplete jobs
+        for job in incomplete_jobs:
+            backend.active_jobs[job.id] = {
+                'job_type': job.job_type,
+                'input_file': job.input_file,
+                'output_file': job.output_file,
+                'correlation_id': job.correlation_id,
+            }
+
+        # 9. Wait for completion
+        async with backend:
+            click.echo(f"\nWaiting for jobs to complete (timeout: {timeout}s)...")
+            click.echo("Press Ctrl+C to abort\n")
+
+            try:
+                success = await backend.wait_for_completion()
+
+                if success:
+                    click.echo("\n✓ All jobs completed successfully")
+                    return 0
+                else:
+                    click.echo("\n✗ Some jobs failed", err=True)
+
+                    # Show failed jobs
+                    failed_jobs = job_queue.get_jobs_by_status('failed', limit=100)
+                    if failed_jobs:
+                        click.echo(f"\nFailed jobs ({len(failed_jobs)}):")
+                        for job in failed_jobs[:10]:
+                            click.echo(f"  #{job.id}: {job.input_file} - {job.error}")
+                        if len(failed_jobs) > 10:
+                            click.echo(f"  ... and {len(failed_jobs) - 10} more")
+
+                    return 1
+
+            except TimeoutError as e:
+                click.echo(f"\n✗ Timeout: {e}", err=True)
+
+                # Show remaining jobs
+                remaining = len(backend.active_jobs)
+                if remaining > 0:
+                    click.echo(f"\n{remaining} job(s) still incomplete:")
+                    for job_id in list(backend.active_jobs.keys())[:10]:
+                        job_info = backend.active_jobs[job_id]
+                        click.echo(f"  #{job_id}: {job_info['input_file']}")
+                    if remaining > 10:
+                        click.echo(f"  ... and {remaining - 10} more")
+
+                    click.echo("\nYou can run 'clx resume' again to continue")
+
+                return 2
+            except KeyboardInterrupt:
+                click.echo("\n\n✗ Aborted by user", err=True)
+
+                # Show remaining jobs
+                remaining = len(backend.active_jobs)
+                if remaining > 0:
+                    click.echo(f"\n{remaining} job(s) still incomplete")
+                    click.echo("Run 'clx resume' again to continue")
+
+                return 130  # Standard exit code for SIGINT
+            except Exception as e:
+                click.echo(f"\n✗ Error: {e}", err=True)
+                logger.error(f"Resume failed: {e}", exc_info=True)
+                return 1
+
+
+@cli.command()
+@click.option(
+    "--db-path",
+    type=click.Path(exists=False, path_type=Path),
+    help="Path to SQLite database (auto-detected if not specified)",
+)
+@click.option(
+    "--reset-hung",
+    is_flag=True,
+    help="Reset hung jobs before resuming (jobs stuck in 'processing' >10 minutes)",
+)
+@click.option(
+    "--timeout",
+    type=int,
+    default=1200,
+    help="Maximum wait time in seconds (default: 1200 = 20 minutes)",
+)
+@click.option(
+    "--force-retry-failed",
+    is_flag=True,
+    help="Reset failed jobs to retry them (only if attempts < max_attempts)",
+)
+@click.option(
+    "--workspace",
+    type=click.Path(exists=True, path_type=Path),
+    help="Workspace path for writing output files (defaults to database directory)",
+)
+def resume(db_path, reset_hung, timeout, force_retry_failed, workspace):
+    """Resume processing incomplete jobs from database.
+
+    This command continues processing jobs from a previous build that was
+    interrupted (timeout, Ctrl+C, system crash, etc.). It does NOT create
+    new jobs - it only processes jobs already in the database.
+
+    The command will:
+    - Find all incomplete jobs (pending, processing, optionally failed)
+    - Check for available workers
+    - Wait for workers to complete the jobs
+    - Report final status
+
+    Examples:
+
+        # Basic resume - auto-detect database
+        clx resume
+
+        # Specify database path
+        clx resume --db-path=/data/clx_jobs.db
+
+        # Reset hung jobs before resuming
+        clx resume --reset-hung
+
+        # Retry failed jobs (if they haven't exceeded max attempts)
+        clx resume --force-retry-failed
+
+        # Specify custom timeout
+        clx resume --timeout=600
+    """
+    exit_code = asyncio.run(
+        resume_build(
+            db_path=db_path,
+            reset_hung=reset_hung,
+            timeout=timeout,
+            force_retry_failed=force_retry_failed,
+            workspace=workspace,
+        )
+    )
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":
