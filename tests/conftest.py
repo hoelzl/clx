@@ -20,6 +20,7 @@ import io
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,6 +38,94 @@ if TYPE_CHECKING:
     from clx.core.course import Course
     from clx.core.section import Section
     from clx.core.topic import Topic
+
+
+# ====================================================================
+# Tool Availability Detection
+# ====================================================================
+
+def _is_plantuml_available() -> bool:
+    """Check if PlantUML is available and functional."""
+    plantuml_jar = os.environ.get('PLANTUML_JAR')
+    if not plantuml_jar or not Path(plantuml_jar).exists():
+        return False
+
+    # Check if file is a Git LFS pointer (not the actual JAR)
+    try:
+        with open(plantuml_jar, 'rb') as f:
+            header = f.read(100)
+            if b'git-lfs.github.com' in header:
+                return False
+    except Exception:
+        return False
+
+    # Check if Java is available
+    try:
+        result = subprocess.run(['java', '-version'],
+                               capture_output=True, timeout=5)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def _is_drawio_available() -> bool:
+    """Check if DrawIO is available and functional."""
+    drawio_exec = os.environ.get('DRAWIO_EXECUTABLE')
+
+    # Try to find drawio in PATH if not set
+    if not drawio_exec:
+        drawio_exec = shutil.which('drawio')
+
+    if not drawio_exec or not Path(drawio_exec).exists():
+        return False
+
+    # Check if file is a Git LFS pointer
+    try:
+        with open(drawio_exec, 'rb') as f:
+            header = f.read(100)
+            if b'git-lfs.github.com' in header:
+                return False
+    except Exception:
+        pass
+
+    return True
+
+
+def _is_xvfb_running() -> bool:
+    """Check if Xvfb is running (required for headless DrawIO)."""
+    if not os.environ.get('DISPLAY'):
+        return False
+
+    try:
+        result = subprocess.run(['pgrep', '-x', 'Xvfb'],
+                               capture_output=True, timeout=5)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+# Store tool availability at module level (cached for performance)
+_PLANTUML_AVAILABLE = None
+_DRAWIO_AVAILABLE = None
+_XVFB_RUNNING = None
+
+
+def get_tool_availability():
+    """Get cached tool availability status."""
+    global _PLANTUML_AVAILABLE, _DRAWIO_AVAILABLE, _XVFB_RUNNING
+
+    if _PLANTUML_AVAILABLE is None:
+        _PLANTUML_AVAILABLE = _is_plantuml_available()
+    if _DRAWIO_AVAILABLE is None:
+        _DRAWIO_AVAILABLE = _is_drawio_available()
+    if _XVFB_RUNNING is None:
+        _XVFB_RUNNING = _is_xvfb_running()
+
+    return {
+        'plantuml': _PLANTUML_AVAILABLE,
+        'drawio': _DRAWIO_AVAILABLE,
+        'xvfb': _XVFB_RUNNING,
+    }
 
 COURSE_1_XML = """
 <course>
@@ -245,6 +334,17 @@ def pytest_configure(config):
 
     By default, suppress application logs during tests unless explicitly enabled.
     """
+    # Register custom markers
+    config.addinivalue_line(
+        "markers", "requires_plantuml: mark test as requiring PlantUML to be installed"
+    )
+    config.addinivalue_line(
+        "markers", "requires_drawio: mark test as requiring DrawIO to be installed"
+    )
+    config.addinivalue_line(
+        "markers", "requires_xvfb: mark test as requiring Xvfb to be running"
+    )
+
     # Configure external tool paths for converters
     # PlantUML JAR path - check if already set in environment
     if 'PLANTUML_JAR' not in os.environ:
@@ -298,6 +398,46 @@ def pytest_configure(config):
 
     for logger_name in loggers_to_quiet:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-skip tests based on tool availability."""
+    tool_status = get_tool_availability()
+
+    # Report tool availability once at the start
+    if items:  # Only report if there are tests to run
+        print("\n" + "="*70)
+        print("External Tool Availability:")
+        print(f"  PlantUML: {'✓ Available' if tool_status['plantuml'] else '✗ Not available'}")
+        print(f"  DrawIO:   {'✓ Available' if tool_status['drawio'] else '✗ Not available'}")
+        print(f"  Xvfb:     {'✓ Running' if tool_status['xvfb'] else '✗ Not running'}")
+        print("="*70 + "\n")
+
+    skip_plantuml = pytest.mark.skip(
+        reason="PlantUML not available - set PLANTUML_JAR and ensure Java is installed"
+    )
+    skip_drawio = pytest.mark.skip(
+        reason="DrawIO not available - set DRAWIO_EXECUTABLE or install DrawIO"
+    )
+    skip_xvfb = pytest.mark.skip(
+        reason="Xvfb not running - start Xvfb and set DISPLAY environment variable"
+    )
+
+    for item in items:
+        # Check for requires_plantuml marker
+        if "requires_plantuml" in [marker.name for marker in item.iter_markers()]:
+            if not tool_status['plantuml']:
+                item.add_marker(skip_plantuml)
+
+        # Check for requires_drawio marker
+        if "requires_drawio" in [marker.name for marker in item.iter_markers()]:
+            if not tool_status['drawio']:
+                item.add_marker(skip_drawio)
+
+        # Check for requires_xvfb marker
+        if "requires_xvfb" in [marker.name for marker in item.iter_markers()]:
+            if not tool_status['xvfb']:
+                item.add_marker(skip_xvfb)
 
 
 @pytest.fixture(scope="function")
