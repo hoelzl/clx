@@ -21,6 +21,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -73,11 +74,13 @@ def _is_drawio_available() -> bool:
 
     DrawIO requires:
     1. DrawIO executable to be available
-    2. DISPLAY environment variable to be set (can be real display or Xvfb)
+    2. On Unix/Linux: DISPLAY environment variable (real display or Xvfb)
+    3. On Windows: No DISPLAY needed (native GUI)
 
-    This works correctly in both:
-    - Desktop environments (DISPLAY=:0 for real display)
-    - Headless environments (DISPLAY=:99 with Xvfb running)
+    This works correctly in:
+    - Windows desktop: DrawIO.exe available (no DISPLAY needed)
+    - Linux/Mac desktop: DrawIO available + DISPLAY=:0 (real display)
+    - Linux/Mac headless: DrawIO available + DISPLAY=:99 (Xvfb)
     """
     # Check if DrawIO executable exists
     drawio_exec = os.environ.get('DRAWIO_EXECUTABLE')
@@ -98,9 +101,11 @@ def _is_drawio_available() -> bool:
     except Exception:
         pass
 
-    # Check if DISPLAY is set (works for both real displays and Xvfb)
-    if not os.environ.get('DISPLAY'):
-        return False
+    # On Unix/Linux, DISPLAY is required (X11)
+    # On Windows, DISPLAY is not needed (native GUI)
+    if sys.platform != 'win32':
+        if not os.environ.get('DISPLAY'):
+            return False
 
     return True
 
@@ -358,8 +363,8 @@ def pytest_configure(config):
         "markers", "requires_plantuml: mark test as requiring PlantUML JAR and Java"
     )
     config.addinivalue_line(
-        "markers", "requires_drawio: mark test as requiring DrawIO executable and DISPLAY "
-                   "(works with both real displays and Xvfb in headless environments)"
+        "markers", "requires_drawio: mark test as requiring DrawIO executable "
+                   "(Unix/Linux: also needs DISPLAY; Windows: no DISPLAY needed)"
     )
     config.addinivalue_line(
         "markers", "requires_xvfb: [DEPRECATED] use requires_drawio instead - "
@@ -432,22 +437,33 @@ def pytest_collection_modifyitems(config, items):
         print(f"  PlantUML: {'✓ Available' if tool_status['plantuml'] else '✗ Not available'}")
         print(f"  DrawIO:   {'✓ Available' if tool_status['drawio'] else '✗ Not available'}")
 
-        # Show Xvfb status for diagnostic purposes
-        display = os.environ.get('DISPLAY', 'not set')
-        if tool_status['xvfb']:
-            print(f"  Display:  ✓ {display} (Xvfb)")
-        elif display != 'not set':
-            print(f"  Display:  ✓ {display} (real display)")
+        # Show display status (platform-aware)
+        if sys.platform == 'win32':
+            print(f"  Display:  ✓ Windows (native GUI, no DISPLAY needed)")
         else:
-            print(f"  Display:  ✗ not set (DrawIO needs DISPLAY)")
+            # Unix/Linux - show DISPLAY status
+            display = os.environ.get('DISPLAY', 'not set')
+            if tool_status['xvfb']:
+                print(f"  Display:  ✓ {display} (Xvfb)")
+            elif display != 'not set':
+                print(f"  Display:  ✓ {display} (real display)")
+            else:
+                print(f"  Display:  ✗ not set (DrawIO needs DISPLAY on Unix/Linux)")
         print("="*70 + "\n")
 
     skip_plantuml = pytest.mark.skip(
         reason="PlantUML not available - set PLANTUML_JAR and ensure Java is installed"
     )
-    skip_drawio = pytest.mark.skip(
-        reason="DrawIO not available - install DrawIO and set DISPLAY environment variable"
-    )
+
+    # Platform-specific skip message for DrawIO
+    if sys.platform == 'win32':
+        skip_drawio = pytest.mark.skip(
+            reason="DrawIO not available - install DrawIO on Windows"
+        )
+    else:
+        skip_drawio = pytest.mark.skip(
+            reason="DrawIO not available - install DrawIO and set DISPLAY environment variable (Unix/Linux)"
+        )
 
     for item in items:
         # Check for requires_plantuml marker
