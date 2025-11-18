@@ -69,7 +69,17 @@ def _is_plantuml_available() -> bool:
 
 
 def _is_drawio_available() -> bool:
-    """Check if DrawIO is available and functional."""
+    """Check if DrawIO is available and can render.
+
+    DrawIO requires:
+    1. DrawIO executable to be available
+    2. DISPLAY environment variable to be set (can be real display or Xvfb)
+
+    This works correctly in both:
+    - Desktop environments (DISPLAY=:0 for real display)
+    - Headless environments (DISPLAY=:99 with Xvfb running)
+    """
+    # Check if DrawIO executable exists
     drawio_exec = os.environ.get('DRAWIO_EXECUTABLE')
 
     # Try to find drawio in PATH if not set
@@ -88,11 +98,20 @@ def _is_drawio_available() -> bool:
     except Exception:
         pass
 
+    # Check if DISPLAY is set (works for both real displays and Xvfb)
+    if not os.environ.get('DISPLAY'):
+        return False
+
     return True
 
 
 def _is_xvfb_running() -> bool:
-    """Check if Xvfb is running (required for headless DrawIO)."""
+    """Check if Xvfb is running.
+
+    Note: This is for informational/diagnostic purposes only.
+    Tests should use requires_drawio marker, which checks for DISPLAY
+    (works with both real displays and Xvfb).
+    """
     if not os.environ.get('DISPLAY'):
         return False
 
@@ -124,7 +143,7 @@ def get_tool_availability():
     return {
         'plantuml': _PLANTUML_AVAILABLE,
         'drawio': _DRAWIO_AVAILABLE,
-        'xvfb': _XVFB_RUNNING,
+        'xvfb': _XVFB_RUNNING,  # For diagnostic purposes only
     }
 
 COURSE_1_XML = """
@@ -336,13 +355,15 @@ def pytest_configure(config):
     """
     # Register custom markers
     config.addinivalue_line(
-        "markers", "requires_plantuml: mark test as requiring PlantUML to be installed"
+        "markers", "requires_plantuml: mark test as requiring PlantUML JAR and Java"
     )
     config.addinivalue_line(
-        "markers", "requires_drawio: mark test as requiring DrawIO to be installed"
+        "markers", "requires_drawio: mark test as requiring DrawIO executable and DISPLAY "
+                   "(works with both real displays and Xvfb in headless environments)"
     )
     config.addinivalue_line(
-        "markers", "requires_xvfb: mark test as requiring Xvfb to be running"
+        "markers", "requires_xvfb: [DEPRECATED] use requires_drawio instead - "
+                   "it works with both real displays and Xvfb"
     )
 
     # Configure external tool paths for converters
@@ -410,17 +431,22 @@ def pytest_collection_modifyitems(config, items):
         print("External Tool Availability:")
         print(f"  PlantUML: {'✓ Available' if tool_status['plantuml'] else '✗ Not available'}")
         print(f"  DrawIO:   {'✓ Available' if tool_status['drawio'] else '✗ Not available'}")
-        print(f"  Xvfb:     {'✓ Running' if tool_status['xvfb'] else '✗ Not running'}")
+
+        # Show Xvfb status for diagnostic purposes
+        display = os.environ.get('DISPLAY', 'not set')
+        if tool_status['xvfb']:
+            print(f"  Display:  ✓ {display} (Xvfb)")
+        elif display != 'not set':
+            print(f"  Display:  ✓ {display} (real display)")
+        else:
+            print(f"  Display:  ✗ not set (DrawIO needs DISPLAY)")
         print("="*70 + "\n")
 
     skip_plantuml = pytest.mark.skip(
         reason="PlantUML not available - set PLANTUML_JAR and ensure Java is installed"
     )
     skip_drawio = pytest.mark.skip(
-        reason="DrawIO not available - set DRAWIO_EXECUTABLE or install DrawIO"
-    )
-    skip_xvfb = pytest.mark.skip(
-        reason="Xvfb not running - start Xvfb and set DISPLAY environment variable"
+        reason="DrawIO not available - install DrawIO and set DISPLAY environment variable"
     )
 
     for item in items:
@@ -429,15 +455,11 @@ def pytest_collection_modifyitems(config, items):
             if not tool_status['plantuml']:
                 item.add_marker(skip_plantuml)
 
-        # Check for requires_drawio marker
-        if "requires_drawio" in [marker.name for marker in item.iter_markers()]:
+        # Check for requires_drawio marker (or deprecated requires_xvfb)
+        markers = [marker.name for marker in item.iter_markers()]
+        if "requires_drawio" in markers or "requires_xvfb" in markers:
             if not tool_status['drawio']:
                 item.add_marker(skip_drawio)
-
-        # Check for requires_xvfb marker
-        if "requires_xvfb" in [marker.name for marker in item.iter_markers()]:
-            if not tool_status['xvfb']:
-                item.add_marker(skip_xvfb)
 
 
 @pytest.fixture(scope="function")

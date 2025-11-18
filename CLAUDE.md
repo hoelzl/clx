@@ -352,10 +352,17 @@ This script reports:
 Tests use granular markers to declare tool requirements:
 
 - `@pytest.mark.requires_plantuml` - Requires PlantUML JAR and Java
-- `@pytest.mark.requires_drawio` - Requires DrawIO executable
-- `@pytest.mark.requires_xvfb` - Requires Xvfb display server
+- `@pytest.mark.requires_drawio` - Requires DrawIO executable and DISPLAY environment variable
+  - Works with both **real displays** (e.g., DISPLAY=:0 on desktop) and **Xvfb** (e.g., DISPLAY=:99 in Docker)
+  - Automatically adapts to your environment - no need to distinguish between desktop and headless!
+- `@pytest.mark.requires_xvfb` - **[DEPRECATED]** Use `requires_drawio` instead
 
 **These markers automatically skip tests** when tools are unavailable. You don't need to specify anything - just run `pytest` and tests will skip as needed.
+
+**Important**: The `requires_drawio` marker is smart enough to work in both desktop and headless environments:
+- **Desktop with real display**: Tests run using the system display (no Xvfb needed)
+- **Headless/Docker with Xvfb**: Tests run using Xvfb virtual display
+- **Headless/Docker without Xvfb**: Tests are automatically skipped
 
 #### Typical Claude Code Web Workflow
 
@@ -387,9 +394,10 @@ markers = [
 
 # Tool requirement markers (auto-registered in conftest.py)
 # These automatically skip tests when tools are unavailable:
-    "requires_plantuml: mark test as requiring PlantUML to be installed",
-    "requires_drawio: mark test as requiring DrawIO to be installed",
-    "requires_xvfb: mark test as requiring Xvfb to be running",
+    "requires_plantuml: mark test as requiring PlantUML JAR and Java",
+    "requires_drawio: mark test as requiring DrawIO executable and DISPLAY "
+                      "(works with both real displays and Xvfb in headless environments)",
+    "requires_xvfb: [DEPRECATED] use requires_drawio instead",
 ```
 
 **Default Behavior**:
