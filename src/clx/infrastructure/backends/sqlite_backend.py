@@ -153,6 +153,17 @@ class SqliteBackend(LocalOpsBackend):
         # Extract correlation_id from payload
         correlation_id = getattr(payload, "correlation_id", None)
 
+        # Cancel existing jobs for this input file (watch mode optimization)
+        # This prevents obsolete jobs from running when a file is modified rapidly
+        if self.job_queue:
+            cancelled_ids = self.job_queue.cancel_jobs_for_file(
+                str(payload.input_file), cancelled_by=correlation_id
+            )
+            if cancelled_ids:
+                logger.info(
+                    f"Cancelled {len(cancelled_ids)} obsolete job(s) for {payload.input_file}"
+                )
+
         # Add job to queue
         job_id = self.job_queue.add_job(
             job_type=job_type,
