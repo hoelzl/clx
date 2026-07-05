@@ -1,5 +1,7 @@
 # CLX - Coding-Academy Lecture Manager eXperimental
 
+**CLX has been superseded by [CLM](https://github.com/hoelzl/clm) which now has all features prototyped as part of CLX (and much more).**
+
 [![CI](https://github.com/hoelzl/clx/actions/workflows/ci.yml/badge.svg)](https://github.com/hoelzl/clx/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hoelzl/clx/branch/master/graph/badge.svg)](https://codecov.io/gh/hoelzl/clx)
 
